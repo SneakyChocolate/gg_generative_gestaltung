@@ -5,25 +5,20 @@ var tex4
 const imgh = 250
 const imgw = 250
 
-function mynoise(tex,xoff, c, a) {
+function mynoise(tex,xoff, c, a, step) {
   for (let x = 0; x < imgw; x++) {
 	let yoff = 0.0;
 	for (let y = 0; y < imgh; y++) {
-		// Use xoff and yoff for noise().
 		let bright = map(noise(xoff, yoff), 0, 1, 0, 255);
 		let alpha = map(noise(xoff, yoff), 0, 1, 0, 255);
-		// Use x and y for the pixel position.
 		let index = (x + y * imgw) * 4;
-		// Set the red, green, blue, ana != undefined ? a : alphad alpha values.
 		tex.pixels[index] = c == 'r' ? 255 : bright;
 		tex.pixels[index + 1] = c == 'g' ? 255 : bright;
 		tex.pixels[index + 2] = c == 'b' ? 255 : bright;
-		tex.pixels[index + 3] = a != undefined ? a : alpha;
-		// Increment yoff.
-		yoff += 0.01;
+		tex.pixels[index + 3] = a != 0 ? a : alpha;
+		yoff += step;
 	}
-	// Increment xoff.
-	xoff += 0.01;
+	xoff += step;
 	}
 	tex.updatePixels();
 	print(`Texture size is ${tex.width}x${tex.height}`);
@@ -45,9 +40,9 @@ function setup() {
 	tex3.loadPixels();
 	tex4.loadPixels();
 
-	mynoise(tex1, 0.1, 'r', 10);
-	mynoise(tex2, 1, 'g', 10);
-	mynoise(tex3, 10, 'b', 10);
+	mynoise(tex1, 0.1, 'r', 10, 0.01);
+	mynoise(tex2, 1, 'g', 30, 0.02);
+	mynoise(tex3, 10, 'b', 70, 0.03);
 
 	for (let i = 0; i < tex4.pixels.length; i += 4) {
 		tex4.pixels[i]     = tex2.pixels[i];
