@@ -44,11 +44,18 @@ function setup() {
 	tex2.loadPixels();
 	tex3.loadPixels();
 	tex4.loadPixels();
-	
+
 	mynoise(tex1, 0.1, 'r', 10);
-	mynoise(tex2, 0.1, 'g', 10);
-	mynoise(tex3, 0.1, 'b', 10);
-	mynoise(tex4, 0.1, 'b', 10);
+	mynoise(tex2, 1, 'g', 10);
+	mynoise(tex3, 10, 'b', 10);
+
+	for (let i = 0; i < tex4.pixels.length; i += 4) {
+		tex4.pixels[i]     = tex2.pixels[i];
+		tex4.pixels[i + 1] = tex3.pixels[i + 1];
+		tex4.pixels[i + 2] = tex1.pixels[i + 2];
+		tex4.pixels[i + 3] = 255;
+	}
+	tex4.updatePixels();
 }
 
 // Called once per frame
