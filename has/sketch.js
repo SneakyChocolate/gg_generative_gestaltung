@@ -1,30 +1,52 @@
-// One-time initialisation at program start
-function setup() {
-	createCanvas(windowWidth, windowHeight);
-	print(`Canvas size is ${width}x${height}`);
+
+/// fn(num,num) [num;2], fn(number) [number;4]
+function noiseTexture(offset_fn, rgba_fn) {
+	const tex = createImage(100, 100);
+	tex.loadPixels();
+	for (let x = 0; x < width; x++) {
+		for (let y = 0; y < height; y++) {
+			let index = (x + y * width) * 4;
+			// A Perlin noise brightness!
+			let [ox,oy] = offset_fn(x, y);
+			let bright = map(noise(ox, oy), 0, 1, 0, 255);
+			let [r,g,b,a] = rgba_fn(bright);
+			tex.pixels[index] = r;
+			tex.pixels[index + 1] = g;
+			tex.pixels[index + 2] = b;
+			tex.pixels[index + 3] = a;
+		}
+	}
+	tex.updatePixels();
+	return tex;
 }
 
-// Called once per frame
+// One-time initialisation at program start
+function setup() {
+	// createCanvas(windowWidth, windowHeight);
+	createCanvas(100, 100);
+	pixelDensity(1);
+	print(`Canvas size is ${width}x${height}`);
+
+	image(noiseTexture(
+		(x,y) => [x * 0.1 + 0, y * 0.1 + 0],
+		(b) => [b,0,0,b*2]),0,0
+	);
+	image(noiseTexture(
+		(x,y) => [x * 0.1 + 50, y * 0.1 + 50],
+		(b) => [0,b,0,b]),0,0
+	);
+	image(noiseTexture(
+		(x,y) => [x * 0.1 + 100, y * 0.1 + 100],
+		(b) => [0,0,b,b/2]),0,0
+	);
+}
+
+
 function draw() {
-
-	// Paint a black background (will completely erase the canvas)
-	background('black');
-	noFill();
-
-	// Two white dots
-	stroke('white');
-	point(width * 0.5, height * 0.5);
-	point(width * 0.5, height * 0.25);
-
-	// A blue line
-	stroke('#0099FF');
-	line(0, height*0.33, width, height*0.33);
-
-	// An orange rectangle
-	stroke(255, 153, 0);
-	rect(width*0.25, height*0.1, width * 0.5, height * 0.8);
+	// background('black');
 }
 
 function windowResized() {
-  resizeCanvas(windowWidth, windowHeight);
+	resizeCanvas(windowWidth, windowHeight);
 }
+
