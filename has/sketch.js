@@ -1,4 +1,5 @@
-
+const width = 500
+const height = 500
 
 // this function is used to replicate world map color similar to minecraft based on height 0 to 1
 function hardenWorldMapRgba(height) {
@@ -64,7 +65,7 @@ function lerpWorldMapRgba(height) {
 /// this function is used to create an off screen image texture based on noise.
 /// fn(num,num) [num;2], fn(number) [number;4]
 function noiseTexture(offset_fn, rgba_fn) {
-	const tex = createImage(windowWidth, windowHeight);
+	const tex = createImage(width, height);
 	tex.loadPixels();
 	for (let x = 0; x < width; x++) {
 		for (let y = 0; y < height; y++) {
@@ -85,7 +86,7 @@ function noiseTexture(offset_fn, rgba_fn) {
 
 function setup() {
 	background("white");
-	createCanvas(windowWidth, windowHeight);
+	createCanvas(width, height);
 	pixelDensity(1);
 	print(`Canvas size is ${width}x${height}`);
 
