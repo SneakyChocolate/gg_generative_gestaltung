@@ -1,5 +1,5 @@
-const width = 500
-const height = 500
+const width = 1500
+const height = 1500
 
 // this function is used to replicate world map color similar to minecraft based on height 0 to 1
 function hardenWorldMapRgba(height) {
@@ -95,12 +95,20 @@ function setup() {
 		(x,y) => [x / 20 + 0, y / 20 + 0],
 		(b) => lerpWorldMapRgba(b/255)),0,0
 	);
+	// cloud shadow
+	image(noiseTexture(
+		(x,y) => [x / 50 + 50, y / 50 + 50],
+		(b) => [0,0,0,b*0.5]),0,0
+	);
+
 	// transparent clouds with 50 offset
 	image(noiseTexture(
 		(x,y) => [x / 50 + 50, y / 50 + 50],
 		(b) => [250,250,255,b*1.5]),0,0
 	);
 	// blendMode(MULTIPLY);
+
+
 	// image(noiseTexture(
 	// 	(x,y) => [x / 50 + 40, y / 50 + 50],
 	// 	(b) => [255,255,0,255]),0,0
