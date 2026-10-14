@@ -62,9 +62,9 @@ function lerpWorldMapRgba(height) {
 	}
 }
 
-/// this function is used to create an off screen image texture based on noise.
-/// fn(num,num) [num;2], fn(number) [number;4]
-function noiseTexture(offset_fn, rgba_fn) {
+// this function is used to create an off screen image texture based on noise.
+// fn(num,num) [num;2], fn(number) [number;4]
+function noiseTexture(offset_fn, rgba_fn, noise_fn = noise) {
 	const tex = createImage(width, height);
 	tex.loadPixels();
 	for (let x = 0; x < width; x++) {
@@ -72,7 +72,7 @@ function noiseTexture(offset_fn, rgba_fn) {
 			let index = (x + y * width) * 4;
 			// A Perlin noise brightness!
 			let [ox,oy] = offset_fn(x, y);
-			let bright = map(noise(ox, oy), 0, 1, 0, 255);
+			let bright = map(noise_fn(ox, oy), 0, 1, 0, 255);
 			let [r,g,b,a] = rgba_fn(bright, x, y);
 			tex.pixels[index] = r;
 			tex.pixels[index + 1] = g;
@@ -82,6 +82,38 @@ function noiseTexture(offset_fn, rgba_fn) {
 	}
 	tex.updatePixels();
 	return tex;
+}
+
+// list of noise layers, filled once in setup
+let noiseLayers = [];
+
+// every layer has its own frequency, strength, rotation and offset
+function makeNoiseLayers(count, seed) {
+	randomSeed(seed);
+	let layers = [];
+	for (let i = 0; i < count; i++) {
+		layers.push({
+			freq: pow(2, i),
+			amp: pow(0.5, i),
+			angle: random(TWO_PI),
+			offset: random(1000),
+		});
+	}
+	return layers;
+}
+
+// adds all layers together and divides by the sum of the strengths, so the result is 0 to 1
+function customNoise(x, y) {
+	let sum = 0;
+	let total = 0;
+	for (let i = 0; i < noiseLayers.length; i++) {
+		let noiseLayer = noiseLayers[i];
+		let rx = x * cos(noiseLayer.angle) - y * sin(noiseLayer.angle);
+		let ry = x * sin(noiseLayer.angle) + y * cos(noiseLayer.angle);
+		sum += noiseLayer.amp * noise(rx * noiseLayer.freq + noiseLayer.offset, ry * noiseLayer.freq + noiseLayer.offset);
+		total += noiseLayer.amp;
+	}
+	return sum / total;
 }
 
 const clouds_count = 100;
@@ -116,11 +148,14 @@ function setup() {
 	pixelDensity(1);
 	print(`Canvas size is ${width}x${height}`);
 
+	noiseLayers = makeNoiseLayers(4, 7);
+
 	// noiseSeed is global and read at texture-build time: one seed per layer
 	// world map
 	image(noiseTexture(
 		(x,y) => [x / 20 + 0, y / 20 + 0],
-		(b,x,y) => lerpWorldMapRgba(terrainHeight(b/255, x, y))),0,0
+		(b,x,y) => lerpWorldMapRgba(terrainHeight(b/255, x, y)),
+		customNoise),0,0
 	);
 	// cloud shadow: same seed as clouds, sampled shifted so it lands down-right of them
 	image(noiseTexture(
@@ -149,4 +184,8 @@ function setup() {
 // function windowResized() {
 // 	resizeCanvas(windowWidth, windowHeight);
 // }
+
+// notes
+// customNoise() {stack und addiert mehrere noises und mapped die wieder auf 0-1}
+// maybe mit rotate, scale mit random werten
 
