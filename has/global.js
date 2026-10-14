@@ -11,6 +11,7 @@ var particles = [];
 
 var flowfield;
 
+var world_noise;
 var world_texture;
 var cloud_texture;
 var shadow_texture;

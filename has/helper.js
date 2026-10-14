@@ -61,8 +61,8 @@ function lerpWorldMapRgba(height) {
 }
 
 /// this function is used to create an off screen image texture based on noise.
-/// fn(num,num) [num;2], fn(number) [number;4]
-function noiseTexture(offset_fn, rgba_fn) {
+/// fn(num,num) [num;2], fn(number) [number;4], fn(@"noise") void,
+function noiseTexture(offset_fn, rgba_fn, pre_noise_fn) {
 	const tex = createImage(width, height);
 	tex.loadPixels();
 	for (let x = 0; x < width; x++) {
@@ -70,7 +70,9 @@ function noiseTexture(offset_fn, rgba_fn) {
 			let index = (x + y * width) * 4;
 			// A Perlin noise brightness!
 			let [ox,oy] = offset_fn(x, y);
-			let bright = map(noise(ox, oy), 0, 1, 0, 255);
+			const generated_noise = noise(ox, oy);
+			let bright = map(generated_noise, 0, 1, 0, 255);
+			if (pre_noise_fn) pre_noise_fn(generated_noise);
 			let [r,g,b,a] = rgba_fn(bright);
 			tex.pixels[index] = r;
 			tex.pixels[index + 1] = g;
@@ -96,21 +98,25 @@ function worldmap_setup() {
 	// world map
 	world_texture = noiseTexture(
 		(x,y) => [x / 20 + 0, y / 20 + 0],
-		(b) => lerpWorldMapRgba(b/255))
-	;
+		(b) => lerpWorldMapRgba(b/255),
+		(noise) => world_noise = noise
+	);
+	console.log(world_noise);
 	// cloud shadow: same shape as clouds, sampled shifted so it lands down-right of them
 	cloud_texture = noiseTexture(
 		(x,y) => [x / 50 + 50 - 0.4, y / 50 + 50 - 0.4],
-		(b) => [0,0,0,cloudAlpha(b)*0.5])
-	;
+		(b) => [0,0,0,cloudAlpha(b)*0.5]
+	);
 	// transparent clouds with 50 offset
 	shadow_texture = noiseTexture(
 		(x,y) => [x / 50 + 50, y / 50 + 50],
-		(b) => [250,250,255,cloudAlpha(b)])
-	;
+		(b) => [250,250,255,cloudAlpha(b)]
+	);
 }
 
 function particle_setup() {
+	
+
 	cols = floor(width / scl);
 	rows = floor(height / scl);
 	flowfield = new Array(cols * rows);
