@@ -1,6 +1,16 @@
 const width = 500
 const height = 500
 
+var inc = 0.1;
+var scl = 10;
+var cols, rows;
+
+var zoff = 0;
+
+var particles = [];
+
+var flowfield;
+
 // this function is used to replicate world map color similar to minecraft based on height 0 to 1
 function hardenWorldMapRgba(height) {
 	// deep water
@@ -84,42 +94,91 @@ function noiseTexture(offset_fn, rgba_fn) {
 	return tex;
 }
 
-function setup() {
-	noiseSeed(100);
+const clouds_count = 140;
+function cloudAlpha(b) {
+	return constrain((b - clouds_count) * 3, 0, 255);
+}
 
+var world_texture;
+var cloud_texture;
+var shadow_texture;
+function worldmap_setup() {
 	background("white");
+	noiseSeed(0);
 	createCanvas(width, height);
 	pixelDensity(1);
 	print(`Canvas size is ${width}x${height}`);
 
 	// world map
-	image(noiseTexture(
+	world_texture = noiseTexture(
 		(x,y) => [x / 20 + 0, y / 20 + 0],
-		(b) => lerpWorldMapRgba(b/255)),0,0
-	);
-	// cloud shadow
-	image(noiseTexture(
-		(x,y) => [x / 50 + 50, y / 50 + 50],
-		(b) => [0,0,50,b*0.5]),0,0
-	);
-
+		(b) => lerpWorldMapRgba(b/255))
+	;
+	// cloud shadow: same shape as clouds, sampled shifted so it lands down-right of them
+	cloud_texture = noiseTexture(
+		(x,y) => [x / 50 + 50 - 0.4, y / 50 + 50 - 0.4],
+		(b) => [0,0,0,cloudAlpha(b)*0.5])
+	;
 	// transparent clouds with 50 offset
-	image(noiseTexture(
+	shadow_texture = noiseTexture(
 		(x,y) => [x / 50 + 50, y / 50 + 50],
-		(b) => [250,250,255,b*1.5]),0,0
-	);
-	// blendMode(MULTIPLY);
+		(b) => [250,250,255,cloudAlpha(b)])
+	;
 
+}
 
-	// image(noiseTexture(
-	// 	(x,y) => [x / 50 + 40, y / 50 + 50],
-	// 	(b) => [255,255,0,255]),0,0
-	// );
+function particle_setup() {
+	cols = floor(width / scl);
+	rows = floor(height / scl);
+	flowfield = new Array(cols * rows);
+	for (var i = 0; i < 300; i++) {
+		particles[i] = new Particle();
+	}
+}
+
+function setup() {
+	particle_setup();
+	worldmap_setup();
 }
 
 
-// function draw() {
-// }
+function draw() {
+	image(world_texture,0,0);
+
+	var yoff = 0;
+	for (var y = 0; y < rows; y++) {
+		var xoff = 0;
+		for (var x = 0; x < cols; x++) {
+			var index = x + y * cols;
+			var angle = noise(xoff, yoff, zoff) * TWO_PI * 4;
+			var v = p5.Vector.fromAngle(angle);
+			v.setMag(1);
+			flowfield[index] = v;
+			xoff += inc;
+			stroke(0, 50);
+			// push();
+			// translate(x * scl, y * scl);
+			// rotate(v.heading());
+			// strokeWeight(1);
+			// line(0, 0, scl, 0);
+			// pop();
+		}
+		yoff += inc;
+
+		zoff += 0.0003;
+	}
+
+	for (var i = 0; i < particles.length; i++) {
+		particles[i].follow(flowfield);
+		particles[i].update();
+		particles[i].edges();
+		particles[i].show();
+	}
+	image(cloud_texture,0,0);
+	image(shadow_texture,0,0);
+
+	// fr.html(floor(frameRate()));
+}
 
 // function windowResized() {
 // 	resizeCanvas(windowWidth, windowHeight);
