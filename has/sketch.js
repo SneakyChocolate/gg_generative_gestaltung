@@ -1,5 +1,5 @@
-const width = 1500
-const height = 1500
+const width = 500
+const height = 500
 
 // this function is used to replicate world map color similar to minecraft based on height 0 to 1
 function hardenWorldMapRgba(height) {
@@ -85,6 +85,8 @@ function noiseTexture(offset_fn, rgba_fn) {
 }
 
 function setup() {
+	noiseSeed(100);
+
 	background("white");
 	createCanvas(width, height);
 	pixelDensity(1);
@@ -98,7 +100,7 @@ function setup() {
 	// cloud shadow
 	image(noiseTexture(
 		(x,y) => [x / 50 + 50, y / 50 + 50],
-		(b) => [0,0,0,b*0.5]),0,0
+		(b) => [0,0,50,b*0.5]),0,0
 	);
 
 	// transparent clouds with 50 offset
