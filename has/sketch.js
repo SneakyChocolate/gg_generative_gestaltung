@@ -1,6 +1,9 @@
 const width = 500
 const height = 500
 
+const clouds_amount = 100;
+
+
 // this function is used to replicate world map color similar to minecraft based on height 0 to 1
 function hardenWorldMapRgba(height) {
 	// deep water
@@ -116,9 +119,32 @@ function customNoise(x, y) {
 	return sum / total;
 }
 
-const clouds_count = 100;
 function cloudAlpha(b) {
-	return constrain((b - clouds_count) * 3, 0, 255);
+	return constrain((b - clouds_amount) * 3, 0, 255);
+}
+
+// sunset gradient
+function cloudColor(brightness) {
+	// 0 = cloud edge, 1 = cloud core
+	let amount = (brightness - clouds_amount) / (255 - clouds_amount);
+	amount = constrain(amount, 0, 1);
+
+	let r, g, b;
+	if (amount < 0.5) {
+		// first half: purple-red -> orange
+		let half = amount * 2;
+		r = lerp(120, 255, half);
+		g = lerp(30, 110, half);
+		b = lerp(70, 40, half);
+	} else {
+		// second half: orange -> yellow
+		let half = amount * 2 - 1;
+		r = 255;
+		g = lerp(110, 210, half);
+		b = lerp(40, 100, half);
+	}
+
+	return [r, g, b, cloudAlpha(brightness)];
 }
 
 // rotated + domain-warped noise coords: breaks up p5 noise()'s grid-aligned look
@@ -157,16 +183,17 @@ function setup() {
 		(b,x,y) => lerpWorldMapRgba(terrainHeight(b/255, x, y)),
 		customNoise),0,0
 	);
+
 	// cloud shadow: same seed as clouds, sampled shifted so it lands down-right of them
 	image(noiseTexture(
 		(x,y) => cloudOffset(x, y, 0.4),
-		(b) => [0,0,0,cloudAlpha(b)*0.5]),0,0
+		(b) => [40,10,40,cloudAlpha(b)*0.5]),0,0
 	);
 
 	// transparent clouds (seed must match shadow)
 	image(noiseTexture(
 		(x,y) => cloudOffset(x, y),
-		(b) => [250,250,255,cloudAlpha(b)]),0,0
+		cloudColor),0,0
 	);
 	// blendMode(MULTIPLY);
 
