@@ -1,5 +1,5 @@
-const width = 1500
-const height = 1500
+const width = 1000
+const height = 1000
 
 // this function is used to replicate world map color similar to minecraft based on height 0 to 1
 function hardenWorldMapRgba(height) {
@@ -84,8 +84,14 @@ function noiseTexture(offset_fn, rgba_fn) {
 	return tex;
 }
 
+const clouds_count = 140;
+function cloudAlpha(b) {
+	return constrain((b - clouds_count) * 3, 0, 255);
+}
+
 function setup() {
 	background("white");
+	noiseSeed(0);
 	createCanvas(width, height);
 	pixelDensity(1);
 	print(`Canvas size is ${width}x${height}`);
@@ -95,16 +101,16 @@ function setup() {
 		(x,y) => [x / 20 + 0, y / 20 + 0],
 		(b) => lerpWorldMapRgba(b/255)),0,0
 	);
-	// cloud shadow
+	// cloud shadow: same shape as clouds, sampled shifted so it lands down-right of them
 	image(noiseTexture(
-		(x,y) => [x / 50 + 50, y / 50 + 50],
-		(b) => [0,0,0,b*0.5]),0,0
+		(x,y) => [x / 50 + 50 - 0.4, y / 50 + 50 - 0.4],
+		(b) => [0,0,0,cloudAlpha(b)*0.5]),0,0
 	);
 
 	// transparent clouds with 50 offset
 	image(noiseTexture(
 		(x,y) => [x / 50 + 50, y / 50 + 50],
-		(b) => [250,250,255,b*1.5]),0,0
+		(b) => [250,250,255,cloudAlpha(b)]),0,0
 	);
 	// blendMode(MULTIPLY);
 
