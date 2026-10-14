@@ -1,5 +1,5 @@
-const width = 1000
-const height = 1000
+const width = 500
+const height = 500
 
 // this function is used to replicate world map color similar to minecraft based on height 0 to 1
 function hardenWorldMapRgba(height) {
@@ -73,7 +73,7 @@ function noiseTexture(offset_fn, rgba_fn) {
 			// A Perlin noise brightness!
 			let [ox,oy] = offset_fn(x, y);
 			let bright = map(noise(ox, oy), 0, 1, 0, 255);
-			let [r,g,b,a] = rgba_fn(bright);
+			let [r,g,b,a] = rgba_fn(bright, x, y);
 			tex.pixels[index] = r;
 			tex.pixels[index + 1] = g;
 			tex.pixels[index + 2] = b;
@@ -84,9 +84,29 @@ function noiseTexture(offset_fn, rgba_fn) {
 	return tex;
 }
 
-const clouds_count = 140;
+const clouds_count = 100;
 function cloudAlpha(b) {
 	return constrain((b - clouds_count) * 3, 0, 255);
+}
+
+// rotated + domain-warped noise coords: breaks up p5 noise()'s grid-aligned look
+function cloudOffset(x, y, shift = 0) {
+	const a = 0.5; // rotation in rad
+	let ox = (x * cos(a) - y * sin(a)) / 50 + 50 - shift;
+	let oy = (x * sin(a) + y * cos(a)) / 50 + 50 - shift;
+	const warp = 2;
+	return [
+		ox + warp * (noise(ox + 100, oy) - 0.5),
+		oy + warp * (noise(ox, oy + 100) - 0.5),
+	];
+}
+
+// base noise gives continents; a second, finer noise only roughens the highlands
+// (weight 0 on water/shore -> smooth coasts, 1 above h=0.65 -> rugged mountains)
+function terrainHeight(h, x, y) {
+	const detail = noise(x / 8 + 300, y / 8 + 300) - 0.5;
+	const weight = constrain((h - 0.4) * 4, 0, 1);
+	return constrain(h + detail * 0.4 * weight, 0, 1);
 }
 
 function setup() {
@@ -96,20 +116,21 @@ function setup() {
 	pixelDensity(1);
 	print(`Canvas size is ${width}x${height}`);
 
+	// noiseSeed is global and read at texture-build time: one seed per layer
 	// world map
 	image(noiseTexture(
 		(x,y) => [x / 20 + 0, y / 20 + 0],
-		(b) => lerpWorldMapRgba(b/255)),0,0
+		(b,x,y) => lerpWorldMapRgba(terrainHeight(b/255, x, y))),0,0
 	);
-	// cloud shadow: same shape as clouds, sampled shifted so it lands down-right of them
+	// cloud shadow: same seed as clouds, sampled shifted so it lands down-right of them
 	image(noiseTexture(
-		(x,y) => [x / 50 + 50 - 0.4, y / 50 + 50 - 0.4],
+		(x,y) => cloudOffset(x, y, 0.4),
 		(b) => [0,0,0,cloudAlpha(b)*0.5]),0,0
 	);
 
-	// transparent clouds with 50 offset
+	// transparent clouds (seed must match shadow)
 	image(noiseTexture(
-		(x,y) => [x / 50 + 50, y / 50 + 50],
+		(x,y) => cloudOffset(x, y),
 		(b) => [250,250,255,cloudAlpha(b)]),0,0
 	);
 	// blendMode(MULTIPLY);
