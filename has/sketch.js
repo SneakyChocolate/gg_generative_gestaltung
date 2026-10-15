@@ -8,8 +8,8 @@
 // world noise assignment
 
 function setup() {
-	particle_setup();
 	worldmap_setup();
+	particle_setup();
 }
 
 function update() {

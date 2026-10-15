@@ -1,5 +1,5 @@
-const width = 500
-const height = 500
+const width = 200
+const height = 200
 
 var inc = 0.1;
 var scl = 10;

@@ -61,7 +61,7 @@ function lerpWorldMapRgba(height) {
 }
 
 /// this function is used to create an off screen image texture based on noise.
-/// fn(num,num) [num;2], fn(number) [number;4], fn(@"noise") void,
+/// fn(num,num) [num;2], fn(number) [number;4], fn(number, number, number) void,
 function noiseTexture(offset_fn, rgba_fn, pre_noise_fn) {
 	const tex = createImage(width, height);
 	tex.loadPixels();
@@ -70,9 +70,9 @@ function noiseTexture(offset_fn, rgba_fn, pre_noise_fn) {
 			let index = (x + y * width) * 4;
 			// A Perlin noise brightness!
 			let [ox,oy] = offset_fn(x, y);
-			const generated_noise = noise(ox, oy);
-			let bright = map(generated_noise, 0, 1, 0, 255);
-			if (pre_noise_fn) pre_noise_fn(generated_noise);
+			const noise_value = noise(ox, oy);
+			let bright = map(noise_value, 0, 1, 0, 255);
+			if (pre_noise_fn) pre_noise_fn(x, y, noise_value);
 			let [r,g,b,a] = rgba_fn(bright);
 			tex.pixels[index] = r;
 			tex.pixels[index + 1] = g;
@@ -95,18 +95,24 @@ function worldmap_setup() {
 	pixelDensity(1);
 	print(`Canvas size is ${width}x${height}`);
 
+	world_noise = new Array(width);
+	for (let i = 0; i < width; i ++) {
+		world_noise[i] = new Array(height);
+	}
+
 	// world map
 	world_texture = noiseTexture(
 		(x,y) => [x / 20 + 0, y / 20 + 0],
 		(b) => lerpWorldMapRgba(b/255),
-		(noise) => world_noise = noise
+		(x, y, noise_value) => { world_noise[x][y] = noise_value; }
 	);
-	console.log(world_noise);
+
 	// cloud shadow: same shape as clouds, sampled shifted so it lands down-right of them
 	cloud_texture = noiseTexture(
 		(x,y) => [x / 50 + 50 - 0.4, y / 50 + 50 - 0.4],
 		(b) => [0,0,0,cloudAlpha(b)*0.5]
 	);
+
 	// transparent clouds with 50 offset
 	shadow_texture = noiseTexture(
 		(x,y) => [x / 50 + 50, y / 50 + 50],
@@ -115,11 +121,27 @@ function worldmap_setup() {
 }
 
 function particle_setup() {
-	
-
 	cols = floor(width / scl);
 	rows = floor(height / scl);
 	flowfield = new Array(cols * rows);
+
+	console.log(world_noise);
+	for (let x = 0; x < width; x ++) {
+		for (let y = 0; y < height; y ++) {
+			const field = world_noise[x][y];
+			const around = [
+				[0,1], // 0
+				[1,1], // 45
+				[1,0], // 90
+				[1,-1], // 135
+				[0,-1], // 180
+				[-1,-1], // 225
+				[-1,0], // 270
+				[-1,1], // 315
+			];
+		}
+	}
+
 	for (var i = 0; i < 300; i++) {
 		particles[i] = new Particle();
 	}
