@@ -4,9 +4,6 @@
 // particle fluid simulation
 // slower particles
 
-// JK FIXME s
-// world noise assignment
-
 function setup() {
 	worldmap_setup();
 	particle_setup();
@@ -35,6 +32,8 @@ function update() {
 		particles[i].update();
 		particles[i].edges();
 	}
+
+	particles.push(new Particle());
 }
 
 function draw() {

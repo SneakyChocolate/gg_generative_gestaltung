@@ -2,7 +2,7 @@ const width = 200
 const height = 200
 
 var inc = 0.1;
-var scl = 10;
+var scl = 1;
 var cols, rows;
 
 var zoff = 0;

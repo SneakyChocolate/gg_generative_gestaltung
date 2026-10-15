@@ -130,15 +130,36 @@ function particle_setup() {
 		for (let y = 0; y < height; y ++) {
 			const field = world_noise[x][y];
 			const around = [
-				[0,1], // 0
-				[1,1], // 45
 				[1,0], // 90
 				[1,-1], // 135
 				[0,-1], // 180
 				[-1,-1], // 225
 				[-1,0], // 270
 				[-1,1], // 315
+				[0,1], // 0
+				[1,1], // 45
 			];
+			var min = field;
+			var degree = 0;
+			for (let r = 0; r < around.length; r ++) {
+				const cx = around[r][0] + x;
+				const cy = around[r][1] + y;
+				var neighbor = 0;
+				if (
+					cx >= 0 && cx < width &&
+					cy >= 0 && cy < height
+				) {
+					neighbor = world_noise[cx][cy];
+				}
+				if (neighbor < min) {
+					min = neighbor;
+					degree = 45 * r;
+				}
+			}
+			var v = p5.Vector.fromAngle(degree / 180 * PI);
+			// var v = p5.Vector.fromAngle(0);
+			v.setMag(1);
+			flowfield[x + y * width] = v;
 		}
 	}
 
