@@ -125,9 +125,8 @@ function particle_setup() {
 	rows = floor(height / scl);
 	flowfield = new Array(cols * rows);
 
-	console.log(world_noise);
-	for (let x = 0; x < width; x ++) {
-		for (let y = 0; y < height; y ++) {
+	for (let x = 0; x < cols; x++) {
+		for (let y = 0; y < rows; y++) {
 			const field = world_noise[x][y];
 			const around = [
 				[1,0], // 90
@@ -140,26 +139,28 @@ function particle_setup() {
 				[1,1], // 45
 			];
 			var min = field;
-			var degree = 0;
-			for (let r = 0; r < around.length; r ++) {
-				const cx = around[r][0] + x;
-				const cy = around[r][1] + y;
-				var neighbor = 0;
-				if (
-					cx >= 0 && cx < width &&
-					cy >= 0 && cy < height
-				) {
-					neighbor = world_noise[cx][cy];
-				}
-				if (neighbor < min) {
-					min = neighbor;
-					degree = 45 * r;
+			var v = createVector(0, 0);
+			var flows = false;
+			
+			for (let r = 0; r < around.length; r++) {
+				const dx = around[r][0];
+				const dy = around[r][1];
+				const cx = dx + x;
+				const cy = dy + y;
+				
+				if (cx >= 0 && cx < cols && cy >= 0 && cy < rows) {
+					var neighbor = world_noise[cx][cy];
+					
+					if (neighbor < min) {
+						min = neighbor;
+						v = createVector(dx, dy);
+						flows = true;
+					}
 				}
 			}
-			var v = p5.Vector.fromAngle(degree / 180 * PI);
-			// var v = p5.Vector.fromAngle(0);
-			v.setMag(1);
-			flowfield[x + y * width] = v;
+
+			if (flows) v.setMag((field - min) * 20);
+			flowfield[x + y * cols] = v;
 		}
 	}
 

@@ -1,8 +1,6 @@
 // JK TODO s
 // ecs for particles
-// world map as flowfield
 // particle fluid simulation
-// slower particles
 
 function setup() {
 	worldmap_setup();
@@ -33,7 +31,7 @@ function update() {
 		particles[i].edges();
 	}
 
-	particles.push(new Particle());
+	// particles.push(new Particle());
 }
 
 function draw() {
