@@ -3,86 +3,92 @@
 // http://patreon.com/codingtrain
 // Code for: https://youtu.be/BjoM9oKOAKY
 
-class Particle {
-	constructor() {
-		this.pos = createVector(random(width), random(height));
-		this.vel = createVector(0, 0);
-		this.acc = createVector(0, 0);
-		this.maxspeed = 0.2;
-		this.prevPos = this.pos.copy();
+class Particles {
+	constructor(size) {
+		this.length = size;
+		this.generations = new Array(size);
+		this.positions = new Array(size);
+		this.velocities = new Array(size);
+		this.accelerations = new Array(size);
+		this.maxspeed = new Array(size);
+		this.previousPosition = new Array(size);
+
+		for (let i = 0; i < this.length; i ++) {
+			this.positions[i] = createVector(random(width), random(height));
+			this.velocities[i] = createVector(0, 0);
+			this.accelerations[i] = createVector(0, 0);
+			this.maxspeed[i] = 0.2;
+			this.previousPosition[i] = this.positions[i].copy();
+		}
 	}
 
-	update() {
-		this.vel.add(this.acc);
-		this.vel.limit(this.maxspeed);
-		this.pos.add(this.vel);
-		this.acc.mult(0);
+	update(flowfield) {
+		this.follow(flowfield);
+		this.move();
+		this.edges();
+	}
+
+	move() {
+		for (let i = 0; i < this.length; i ++) {
+			this.velocities[i].add(this.accelerations[i]);
+			this.velocities[i].limit(this.maxspeed[i]);
+			this.positions[i].add(this.velocities[i]);
+			this.accelerations[i].mult(0);
+		}
 	}
 
 	follow(vectors) {
-		var x = floor(this.pos.x / scl);
-		var y = floor(this.pos.y / scl);
-		var index = x + y * cols;
-		var force = vectors[index];
-		this.applyForce(force);
+		for (let i = 0; i < this.length; i ++) {
+			var x = floor(this.positions[i].x / scl);
+			var y = floor(this.positions[i].y / scl);
+			var index = x + y * cols;
+			var force = vectors[index];
+			this.applyForce(i, force);
+		}
 	}
 
-	applyForce(force) {
-		this.acc.add(force);
+	applyForce(i, force) {
+		this.accelerations[i].add(force);
 	}
 
 	show() {
 		stroke(0,0,255);
 		strokeWeight(1.5);
-		line(this.pos.x, this.pos.y, this.prevPos.x, this.prevPos.y);
-		this.updatePrev();
+		for (let i = 0; i < this.length; i ++) {
+			line(this.positions[i].x, this.positions[i].y, this.previousPosition[i].x, this.previousPosition[i].y);
+			this.updatePrev(i);
+		}
 	}
 
-	updatePrev() {
-		this.prevPos.x = this.pos.x;
-		this.prevPos.y = this.pos.y;
+	updatePrev(i) {
+		this.previousPosition[i].x = this.positions[i].x;
+		this.previousPosition[i].y = this.positions[i].y;
 	}
 
-	// edges() {
-	// 	if (this.pos.x > width) {
-	// 		this.pos.x = 0;
-	// 		this.updatePrev();
-	// 	}
-	// 	if (this.pos.x < 0) {
-	// 		this.pos.x = width;
-	// 		this.updatePrev();
-	// 	}
-	// 	if (this.pos.y > height) {
-	// 		this.pos.y = 0;
-	// 		this.updatePrev();
-	// 	}
-	// 	if (this.pos.y < 0) {
-	// 		this.pos.y = height;
-	// 		this.updatePrev();
-	// 	}
-	// }
-
-	respawn() {
-		this.pos = createVector(random(width), random(height));
-		this.vel = createVector(0, 0);
-		this.acc = createVector(0, 0);
+	respawn(i) {
+		this.positions[i] = createVector(random(width), random(height));
+		this.velocities[i] = createVector(0, 0);
+		this.accelerations[i] = createVector(0, 0);
 	}
 	edges() {
-		if (this.pos.x > width) {
-			this.respawn();
-			this.updatePrev();
-		}
-		if (this.pos.x < 0) {
-			this.respawn();
-			this.updatePrev();
-		}
-		if (this.pos.y > height) {
-			this.respawn();
-			this.updatePrev();
-		}
-		if (this.pos.y < 0) {
-			this.respawn();
-			this.updatePrev();
+		for (let i = 0; i < this.length; i ++) {
+			if (this.positions[i].x > width) {
+				this.respawn(i);
+				this.updatePrev(i);
+			}
+			if (this.positions[i].x < 0) {
+				this.respawn(i);
+				this.updatePrev(i);
+			}
+			if (this.positions[i].y > height) {
+				this.respawn(i);
+				this.updatePrev(i);
+			}
+			if (this.positions[i].y < 0) {
+				this.respawn(i);
+				this.updatePrev(i);
+			}
 		}
 	}
 }
+

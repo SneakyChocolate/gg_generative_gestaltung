@@ -25,11 +25,13 @@ function update() {
 	// 	zoff += 0.0003;
 	// }
 
-	for (var i = 0; i < particles.length; i++) {
-		particles[i].follow(flowfield);
-		particles[i].update();
-		particles[i].edges();
-	}
+	// for (var i = 0; i < particles.length; i++) {
+	// 	particles[i].follow(flowfield);
+	// 	particles[i].update();
+	// 	particles[i].edges();
+	// }
+
+	particles.update(flowfield);
 
 	// particles.push(new Particle());
 }
@@ -42,9 +44,10 @@ function draw() {
 	image(world_texture,0,0);
 
 	// draw particles in between ground and clouds
-	for (var i = 0; i < particles.length; i++) {
-		particles[i].show();
-	}
+	// for (var i = 0; i < particles.length; i++) {
+	// 	particles[i].show();
+	// }
+	particles.show();
 
 	// clouds
 	image(cloud_texture,0,0);
