@@ -170,3 +170,15 @@ function particle_setup() {
 	particles = new Particles(300);
 }
 
+function iter(list, handle_fn) {
+	for (let i = 0; i < length; i ++) {
+		handle_fn(list[i]);
+	}
+}
+function iter2(length, handle_fn) {
+	for (let i = 0; i < length - 1; i ++) {
+		for (let i2 = i + 1; i2 < length; i2 ++) {
+			handle_fn(i, i2);
+		}
+	}
+}

@@ -38,13 +38,6 @@ class Particles {
 		this.length += 1;
 	}
 
-	// fn(number)
-	iter(handle_fn) {
-		for (let i = 0; i < this.length; i ++) {
-			handle_fn(i);
-		}
-	}
-
 	update(flowfield) {
 		this.handleFlowfield(flowfield);
 		this.handleCollision();
@@ -72,18 +65,18 @@ class Particles {
 	}
 
 	handleCollision() {
-		this.iter((a) => {
-			this.iter((b) => {
-				const difference = this.positions[a].copy();
-				difference.sub(this.positions[b]);
-				const square_distance = difference.x * difference.x + difference.y * difference.y;
-				if (square_distance < 4) {
-					const addedAcceleration = difference.copy();
-					addedAcceleration.x = 1 / addedAcceleration.x / 10;
-					addedAcceleration.y = 1 / addedAcceleration.y / 10;
-					this.accelerations[a].add(addedAcceleration);
-				}
-			});
+		iter2(this.length, (a,b) => {
+			const difference = this.positions[a].copy();
+			difference.sub(this.positions[b]);
+			const square_distance = difference.x * difference.x + difference.y * difference.y;
+			if (square_distance < 4) {
+				const addedAcceleration = difference.copy();
+				addedAcceleration.x = 1 / addedAcceleration.x / 10;
+				addedAcceleration.y = 1 / addedAcceleration.y / 10;
+
+				this.accelerations[a].add(addedAcceleration);
+				this.accelerations[b].sub(addedAcceleration);
+			}
 		});
 	}
 
