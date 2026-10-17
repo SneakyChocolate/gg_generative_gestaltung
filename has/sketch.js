@@ -2,6 +2,7 @@ const width = 500
 const height = 500
 
 const clouds_amount = 100;
+const cloud_edge_sharpness = 6; // higher = clouds get opaque faster above the threshold
 
 
 // this function is used to replicate world map color similar to minecraft based on height 0 to 1
@@ -70,12 +71,13 @@ function lerpWorldMapRgba(height) {
 function noiseTexture(offset_fn, rgba_fn, noise_fn = noise) {
 	const tex = createImage(width, height);
 	tex.loadPixels();
-	for (let x = 0; x < width; x++) {
-		for (let y = 0; y < height; y++) {
+	// y outer: pixels are written in memory order
+	for (let y = 0; y < height; y++) {
+		for (let x = 0; x < width; x++) {
 			let index = (x + y * width) * 4;
 			// A Perlin noise brightness!
 			let [ox,oy] = offset_fn(x, y);
-			let bright = map(noise_fn(ox, oy), 0, 1, 0, 255);
+			let bright = noise_fn(ox, oy) * 255;
 			let [r,g,b,a] = rgba_fn(bright, x, y);
 			tex.pixels[index] = r;
 			tex.pixels[index + 1] = g;
@@ -95,10 +97,12 @@ function makeNoiseLayers(count, seed) {
 	randomSeed(seed);
 	let layers = [];
 	for (let i = 0; i < count; i++) {
+		let angle = random(TWO_PI);
 		layers.push({
 			freq: pow(2, i),
 			amp: pow(0.5, i),
-			angle: random(TWO_PI),
+			cos: cos(angle),
+			sin: sin(angle),
 			offset: random(1000),
 		});
 	}
@@ -111,8 +115,8 @@ function customNoise(x, y) {
 	let total = 0;
 	for (let i = 0; i < noiseLayers.length; i++) {
 		let noiseLayer = noiseLayers[i];
-		let rx = x * cos(noiseLayer.angle) - y * sin(noiseLayer.angle);
-		let ry = x * sin(noiseLayer.angle) + y * cos(noiseLayer.angle);
+		let rx = x * noiseLayer.cos - y * noiseLayer.sin;
+		let ry = x * noiseLayer.sin + y * noiseLayer.cos;
 		sum += noiseLayer.amp * noise(rx * noiseLayer.freq + noiseLayer.offset, ry * noiseLayer.freq + noiseLayer.offset);
 		total += noiseLayer.amp;
 	}
@@ -120,11 +124,18 @@ function customNoise(x, y) {
 }
 
 function cloudAlpha(b) {
-	return constrain((b - clouds_amount) * 3, 0, 255);
+	return constrain((b - clouds_amount) * cloud_edge_sharpness, 0, 255);
 }
 
-// sunset gradient
+// base cloud layer: plain color
 function cloudColor(brightness) {
+	// dusk: dark violet at the edge -> dusty pink in the core, so the orange light blends into it
+	let amount = constrain((brightness - clouds_amount) / (255 - clouds_amount), 0, 1);
+	return [lerp(70, 175, amount), lerp(55, 120, amount), lerp(100, 140, amount), cloudAlpha(brightness)];
+}
+
+// light layer on top of the clouds: sunset gradient, only visible where the cloud faces the sun
+function cloudLightColor(brightness, x, y) {
 	// 0 = cloud edge, 1 = cloud core
 	let amount = (brightness - clouds_amount) / (255 - clouds_amount);
 	amount = constrain(amount, 0, 1);
@@ -144,14 +155,23 @@ function cloudColor(brightness) {
 		b = lerp(40, 100, half);
 	}
 
-	return [r, g, b, cloudAlpha(brightness)];
+	// sun sits west-north-west. Look sunward along the cloud height: if the cloud gets lower there,
+	// this spot faces the sun (orange), if it gets higher it is in the cloud's own shade (dark)
+	const sun = [-0.92, -0.38];
+	const reach = 40; // px, bigger = wider lit area
+	let [sx, sy] = cloudOffset(x + sun[0] * reach, y + sun[1] * reach);
+	let brightnessSun = map(noise(sx, sy), 0, 1, 0, 255);
+	let lit = constrain((brightness - brightnessSun) / 80, 0, 1);
+	lit = lit * lit * (3 - 2 * lit); // smoothstep: soft transition instead of a hard orange edge
+
+	return [r, g, b, cloudAlpha(brightness) * lit];
 }
 
 // rotated + domain-warped noise coords: breaks up p5 noise()'s grid-aligned look
 function cloudOffset(x, y, shift = 0) {
-	const a = 0.5; // rotation in rad
-	let ox = (x * cos(a) - y * sin(a)) / 50 + 50 - shift;
-	let oy = (x * sin(a) + y * cos(a)) / 50 + 50 - shift;
+	const c = 0.8775825618903728, s = 0.479425538604203; // cos/sin of 0.5 rad
+	let ox = (x * c - y * s) / 50 + 50 - shift;
+	let oy = (x * s + y * c) / 50 + 50 - shift;
 	const warp = 2;
 	return [
 		ox + warp * (noise(ox + 100, oy) - 0.5),
@@ -162,8 +182,9 @@ function cloudOffset(x, y, shift = 0) {
 // base noise gives continents; a second, finer noise only roughens the highlands
 // (weight 0 on water/shore -> smooth coasts, 1 above h=0.65 -> rugged mountains)
 function terrainHeight(h, x, y) {
-	const detail = noise(x / 8 + 300, y / 8 + 300) - 0.5;
 	const weight = constrain((h - 0.4) * 4, 0, 1);
+	if (weight === 0) return h; // skip noise on water/shore
+	const detail = noise(x / 8 + 300, y / 8 + 300) - 0.5;
 	return constrain(h + detail * 0.4 * weight, 0, 1);
 }
 
@@ -173,6 +194,7 @@ function setup() {
 	createCanvas(width, height);
 	pixelDensity(1);
 	print(`Canvas size is ${width}x${height}`);
+	const start = millis();
 
 	noiseLayers = makeNoiseLayers(4, 7);
 
@@ -183,6 +205,11 @@ function setup() {
 		(b,x,y) => lerpWorldMapRgba(terrainHeight(b/255, x, y)),
 		customNoise),0,0
 	);
+
+	// dusk tint over the whole map
+	noStroke();
+	fill(40, 20, 70, 110);
+	rect(0, 0, width, height);
 
 	// cloud shadow: same seed as clouds, sampled shifted so it lands down-right of them
 	image(noiseTexture(
@@ -195,6 +222,13 @@ function setup() {
 		(x,y) => cloudOffset(x, y),
 		cloudColor),0,0
 	);
+
+	// light layer (same coords as clouds)
+	image(noiseTexture(
+		(x,y) => cloudOffset(x, y),
+		cloudLightColor),0,0
+	);
+	print(`Image generated in ${((millis() - start) / 1000).toFixed(2)}s`);
 	// blendMode(MULTIPLY);
 
 
@@ -216,3 +250,6 @@ function setup() {
 // customNoise() {stack und addiert mehrere noises und mapped die wieder auf 0-1}
 // maybe mit rotate, scale mit random werten
 
+// todo
+// fps count und debug info
+// mehr gui wie rahmen, bild centrieren, maybe halloween theme
