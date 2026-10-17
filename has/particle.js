@@ -10,20 +10,44 @@ class Particles {
 		this.positions = new Array(size);
 		this.velocities = new Array(size);
 		this.accelerations = new Array(size);
-		this.maxspeed = new Array(size);
-		this.previousPosition = new Array(size);
+		this.maxspeeds = new Array(size);
+		this.previousPositions = new Array(size);
 
 		for (let i = 0; i < this.length; i ++) {
 			this.positions[i] = createVector(random(width), random(height));
 			this.velocities[i] = createVector(0, 0);
 			this.accelerations[i] = createVector(0, 0);
-			this.maxspeed[i] = 0.2;
-			this.previousPosition[i] = this.positions[i].copy();
+			this.maxspeeds[i] = 0.2;
+			this.previousPositions[i] = this.positions[i].copy();
+		}
+	}
+
+	push() {
+		const position = createVector(random(width), random(height));
+		const velocitie = createVector(0, 0);
+		const acceleration = createVector(0, 0);
+		const maxspeed = 0.2;
+		const previousPosition = position.copy();
+
+		this.positions.push(position);
+		this.velocities.push(velocitie);
+		this.accelerations.push(acceleration);
+		this.maxspeeds.push(maxspeed);
+		this.previousPositions.push(previousPosition);
+
+		this.length += 1;
+	}
+
+	// fn(number)
+	iter(handle_fn) {
+		for (let i = 0; i < this.length; i ++) {
+			handle_fn(i);
 		}
 	}
 
 	update(flowfield) {
-		this.follow(flowfield);
+		this.handleFlowfield(flowfield);
+		this.handleCollision();
 		this.move();
 		this.edges();
 	}
@@ -31,13 +55,13 @@ class Particles {
 	move() {
 		for (let i = 0; i < this.length; i ++) {
 			this.velocities[i].add(this.accelerations[i]);
-			this.velocities[i].limit(this.maxspeed[i]);
+			this.velocities[i].limit(this.maxspeeds[i]);
 			this.positions[i].add(this.velocities[i]);
 			this.accelerations[i].mult(0);
 		}
 	}
 
-	follow(vectors) {
+	handleFlowfield(vectors) {
 		for (let i = 0; i < this.length; i ++) {
 			var x = floor(this.positions[i].x / scl);
 			var y = floor(this.positions[i].y / scl);
@@ -45,6 +69,22 @@ class Particles {
 			var force = vectors[index];
 			this.applyForce(i, force);
 		}
+	}
+
+	handleCollision() {
+		this.iter((a) => {
+			this.iter((b) => {
+				const difference = this.positions[a].copy();
+				difference.sub(this.positions[b]);
+				const square_distance = difference.x * difference.x + difference.y * difference.y;
+				if (square_distance < 4) {
+					const addedAcceleration = difference.copy();
+					addedAcceleration.x = 1 / addedAcceleration.x / 10;
+					addedAcceleration.y = 1 / addedAcceleration.y / 10;
+					this.accelerations[a].add(addedAcceleration);
+				}
+			});
+		});
 	}
 
 	applyForce(i, force) {
@@ -55,14 +95,14 @@ class Particles {
 		stroke(0,0,255);
 		strokeWeight(1.5);
 		for (let i = 0; i < this.length; i ++) {
-			line(this.positions[i].x, this.positions[i].y, this.previousPosition[i].x, this.previousPosition[i].y);
+			line(this.positions[i].x, this.positions[i].y, this.previousPositions[i].x, this.previousPositions[i].y);
 			this.updatePrev(i);
 		}
 	}
 
 	updatePrev(i) {
-		this.previousPosition[i].x = this.positions[i].x;
-		this.previousPosition[i].y = this.positions[i].y;
+		this.previousPositions[i].x = this.positions[i].x;
+		this.previousPositions[i].y = this.positions[i].y;
 	}
 
 	respawn(i) {

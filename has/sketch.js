@@ -1,6 +1,5 @@
 // JK TODO s
-// ecs for particles
-// particle fluid simulation
+// particle fluid simulation optimizations
 
 function setup() {
 	worldmap_setup();
@@ -32,8 +31,7 @@ function update() {
 	// }
 
 	particles.update(flowfield);
-
-	// particles.push(new Particle());
+	particles.push();
 }
 
 function draw() {
