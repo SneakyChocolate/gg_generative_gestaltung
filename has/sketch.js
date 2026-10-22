@@ -29,9 +29,7 @@ function draw() {
 	particles.show();
 
 	// clouds
-	image(shadow_texture,0,0);
-	image(cloud_texture,0,0);
-	image(light_texture,0,0);
+	image(sky_texture,0,0);
 
 	if (showChunks) drawChunks();
 	if (showDebug) drawDebug();

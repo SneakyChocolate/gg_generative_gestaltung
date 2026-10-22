@@ -225,6 +225,13 @@ function worldmap_setup() {
 
 	// light layer (same coords as clouds)
 	light_texture = noiseTexture(cloudOffset, cloudLightColor);
+
+	// clouds never change, so draw all three layers once into one image
+	sky_texture = createGraphics(width, height);
+	sky_texture.pixelDensity(1);
+	sky_texture.image(shadow_texture, 0, 0);
+	sky_texture.image(cloud_texture, 0, 0);
+	sky_texture.image(light_texture, 0, 0);
 }
 
 function particle_setup() {
@@ -248,16 +255,16 @@ function particle_setup() {
 			var min = field;
 			var v = createVector(0, 0);
 			var flows = false;
-			
+
 			for (let r = 0; r < around.length; r++) {
 				const dx = around[r][0];
 				const dy = around[r][1];
 				const cx = dx + x;
 				const cy = dy + y;
-				
+
 				if (cx >= 0 && cx < cols && cy >= 0 && cy < rows) {
 					var neighbor = world_noise[cx][cy];
-					
+
 					if (neighbor < min) {
 						min = neighbor;
 						v = createVector(dx, dy);

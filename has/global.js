@@ -22,6 +22,7 @@ var world_texture;
 var cloud_texture;
 var shadow_texture;
 var light_texture;
+var sky_texture;
 
 const clouds_count = 140;
 const cloud_edge_sharpness = 6; // higher = clouds get opaque faster above the threshold
