@@ -88,6 +88,7 @@ function noiseTexture(offset_fn, rgba_fn, noise_fn = noise, pre_noise_fn) {
 // list of noise layers, filled once in setup
 let noiseLayers = [];
 
+// AI-generated (Claude)
 // every layer has its own frequency, strength, rotation and offset
 function makeNoiseLayers(count, seed) {
 	randomSeed(seed);
@@ -105,6 +106,7 @@ function makeNoiseLayers(count, seed) {
 	return layers;
 }
 
+// AI-generated (Claude)
 // adds all layers together and divides by the sum of the strengths, so the result is 0 to 1
 function customNoise(x, y) {
 	let sum = 0;
@@ -119,10 +121,12 @@ function customNoise(x, y) {
 	return sum / total;
 }
 
+// AI-generated (Claude)
 function cloudAlpha(b) {
-	return constrain((b - clouds_count) * cloud_edge_sharpness, 0, 255);
+	return map(b, clouds_count, clouds_count + 255 / cloud_edge_sharpness, 0, 255, true);
 }
 
+// AI-generated (Claude)
 // base cloud layer: plain color
 function cloudColor(brightness) {
 	// dusk: dark violet at the edge -> dusty pink in the core, so the orange light blends into it
@@ -130,25 +134,18 @@ function cloudColor(brightness) {
 	return [lerp(70, 175, amount), lerp(55, 120, amount), lerp(100, 140, amount), cloudAlpha(brightness)];
 }
 
+// AI-generated (Claude)
 // light layer on top of the clouds: sunset gradient, only visible where the cloud faces the sun
 function cloudLightColor(brightness, x, y) {
 	// 0 = cloud edge, 1 = cloud core
 	let amount = map(brightness, clouds_count, 255, 0, 1, true);
 
-	let r, g, b;
-	if (amount < 0.5) {
-		// first half: purple-red -> orange
-		let half = amount * 2;
-		r = lerp(120, 255, half);
-		g = lerp(30, 110, half);
-		b = lerp(70, 40, half);
-	} else {
-		// second half: orange -> yellow
-		let half = amount * 2 - 1;
-		r = 255;
-		g = lerp(110, 210, half);
-		b = lerp(40, 100, half);
-	}
+	// first half: purple-red -> orange, second half: orange -> yellow
+	let toOrange = map(amount, 0, 0.5, 0, 1, true);
+	let toYellow = map(amount, 0.5, 1, 0, 1, true);
+	let r = lerp(120, 255, toOrange);
+	let g = lerp(lerp(30, 110, toOrange), 210, toYellow);
+	let b = lerp(lerp(70, 40, toOrange), 100, toYellow);
 
 	// sun sits west-north-west. Look sunward along the cloud height: if the cloud gets lower there,
 	// this spot faces the sun (orange), if it gets higher it is in the cloud's own shade (dark)
@@ -156,12 +153,13 @@ function cloudLightColor(brightness, x, y) {
 	const reach = 40; // px, bigger = wider lit area
 	let [sx, sy] = cloudOffset(x + sun[0] * reach, y + sun[1] * reach);
 	let brightnessSun = noise(sx, sy) * 255;
-	let lit = constrain((brightness - brightnessSun) / 80, 0, 1);
+	let lit = map(brightness - brightnessSun, 0, 80, 0, 1, true);
 	lit = lit * lit * (3 - 2 * lit); // smoothstep: soft transition instead of a hard orange edge
 
 	return [r, g, b, cloudAlpha(brightness) * lit];
 }
 
+// AI-generated (Claude)
 // rotated + domain-warped noise coords: breaks up p5 noise()'s grid-aligned look
 function cloudOffset(x, y, shift = 0) {
 	const c = cos(0.5), s = sin(0.5);
@@ -174,6 +172,7 @@ function cloudOffset(x, y, shift = 0) {
 	];
 }
 
+// AI-generated (Claude)
 // base noise gives continents; a second, finer noise only roughens the highlands
 // (weight 0 on water/shore -> smooth coasts, 1 above h=0.65 -> rugged mountains)
 function terrainHeight(h, x, y) {

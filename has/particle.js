@@ -88,7 +88,7 @@ class Particles {
 	}
 
 	show() {
-		stroke(0,0,255);
+		stroke(0,0,255,70);
 		strokeWeight(1.5);
 		for (let i = 0; i < this.length; i ++) {
 			line(this.positions[i].x, this.positions[i].y, this.previousPositions[i].x, this.previousPositions[i].y);
