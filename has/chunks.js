@@ -5,7 +5,10 @@ class GridChunks {
 		this.position_fn = position_fn;
 		this.width = width;
 		this.height = height;
-		this.items = new Array(width * height).fill([]);
+		this.items = new Array(width * height);
+		for (let i = 0; i < this.items.length; i ++) {
+			this.items[i] = [];
+		}
 	}
 
 	// fn([T]) void
