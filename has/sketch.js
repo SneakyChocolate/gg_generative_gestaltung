@@ -130,15 +130,14 @@ function cloudAlpha(b) {
 // base cloud layer: plain color
 function cloudColor(brightness) {
 	// dusk: dark violet at the edge -> dusty pink in the core, so the orange light blends into it
-	let amount = constrain((brightness - clouds_amount) / (255 - clouds_amount), 0, 1);
+	let amount = map(brightness, clouds_amount, 255, 0, 1, true);
 	return [lerp(70, 175, amount), lerp(55, 120, amount), lerp(100, 140, amount), cloudAlpha(brightness)];
 }
 
 // light layer on top of the clouds: sunset gradient, only visible where the cloud faces the sun
 function cloudLightColor(brightness, x, y) {
 	// 0 = cloud edge, 1 = cloud core
-	let amount = (brightness - clouds_amount) / (255 - clouds_amount);
-	amount = constrain(amount, 0, 1);
+	let amount = map(brightness, clouds_amount, 255, 0, 1, true);
 
 	let r, g, b;
 	if (amount < 0.5) {
@@ -169,7 +168,7 @@ function cloudLightColor(brightness, x, y) {
 
 // rotated + domain-warped noise coords: breaks up p5 noise()'s grid-aligned look
 function cloudOffset(x, y, shift = 0) {
-	const c = 0.8775825618903728, s = 0.479425538604203; // cos/sin of 0.5 rad
+	const c = cos(0.5), s = sin(0.5);
 	let ox = (x * c - y * s) / 50 + 50 - shift;
 	let oy = (x * s + y * c) / 50 + 50 - shift;
 	const warp = 2;
@@ -182,7 +181,7 @@ function cloudOffset(x, y, shift = 0) {
 // base noise gives continents; a second, finer noise only roughens the highlands
 // (weight 0 on water/shore -> smooth coasts, 1 above h=0.65 -> rugged mountains)
 function terrainHeight(h, x, y) {
-	const weight = constrain((h - 0.4) * 4, 0, 1);
+	const weight = map(h, 0.4, 0.65, 0, 1, true);
 	if (weight === 0) return h; // skip noise on water/shore
 	const detail = noise(x / 8 + 300, y / 8 + 300) - 0.5;
 	return constrain(h + detail * 0.4 * weight, 0, 1);
