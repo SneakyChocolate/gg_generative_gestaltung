@@ -159,7 +159,7 @@ function cloudLightColor(brightness, x, y) {
 	const sun = [-0.92, -0.38];
 	const reach = 40; // px, bigger = wider lit area
 	let [sx, sy] = cloudOffset(x + sun[0] * reach, y + sun[1] * reach);
-	let brightnessSun = map(noise(sx, sy), 0, 1, 0, 255);
+	let brightnessSun = noise(sx, sy) * 255;
 	let lit = constrain((brightness - brightnessSun) / 80, 0, 1);
 	lit = lit * lit * (3 - 2 * lit); // smoothstep: soft transition instead of a hard orange edge
 
@@ -200,7 +200,7 @@ function setup() {
 	// noiseSeed is global and read at texture-build time: one seed per layer
 	// world map
 	image(noiseTexture(
-		(x,y) => [x / 20 + 0, y / 20 + 0],
+		(x,y) => [x / 20, y / 20],
 		(b,x,y) => lerpWorldMapRgba(terrainHeight(b/255, x, y)),
 		customNoise),0,0
 	);
@@ -218,13 +218,13 @@ function setup() {
 
 	// transparent clouds (seed must match shadow)
 	image(noiseTexture(
-		(x,y) => cloudOffset(x, y),
+		cloudOffset,
 		cloudColor),0,0
 	);
 
 	// light layer (same coords as clouds)
 	image(noiseTexture(
-		(x,y) => cloudOffset(x, y),
+		cloudOffset,
 		cloudLightColor),0,0
 	);
 	print(`Image generated in ${((millis() - start) / 1000).toFixed(2)}s`);
