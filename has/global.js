@@ -8,6 +8,7 @@ var cols, rows;
 var zoff = 0;
 
 var particles = [];
+var chunks;
 
 var flowfield;
 

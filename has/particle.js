@@ -38,9 +38,11 @@ class Particles {
 		this.length += 1;
 	}
 
-	update(flowfield) {
+	update(flowfield, chunks) {
 		this.handleFlowfield(flowfield);
-		this.handleCollision();
+		chunks.iterGroups((chunk) => {
+			this.handleCollision(chunk);
+		})
 		this.move();
 		this.edges();
 	}
@@ -64,8 +66,9 @@ class Particles {
 		}
 	}
 
-	handleCollision() {
-		iter2(this.length, (a,b) => {
+	handleCollision(chunk) {
+		iter2(chunk.length, (ai,bi) => {
+			let [a,b] = [chunk[ai], chunk[bi]];
 			const difference = this.positions[a].copy();
 			difference.sub(this.positions[b]);
 			const square_distance = difference.x * difference.x + difference.y * difference.y;

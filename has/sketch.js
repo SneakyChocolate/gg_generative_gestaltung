@@ -2,35 +2,19 @@
 // particle fluid simulation optimizations
 
 function setup() {
+	chunks = new GridChunks(20, 20, (position) => {
+		return [
+			Math.floor(position.x / width * 20),
+			Math.floor(position.y / height * 20)
+		];
+	});
 	worldmap_setup();
 	particle_setup();
 }
 
 function update() {
-	// var yoff = 0;
-	// for (var y = 0; y < rows; y++) {
-	// 	var xoff = 0;
-	// 	for (var x = 0; x < cols; x++) {
-	// 		var index = x + y * cols;
-	// 		var angle = noise(xoff, yoff, zoff) * TWO_PI * 4;
-	// 		var v = p5.Vector.fromAngle(angle);
-	// 		v.setMag(1);
-	// 		flowfield[index] = v;
-	// 		xoff += inc;
-	// 		stroke(0, 50);
-	// 	}
-	// 	yoff += inc;
-
-	// 	zoff += 0.0003;
-	// }
-
-	// for (var i = 0; i < particles.length; i++) {
-	// 	particles[i].follow(flowfield);
-	// 	particles[i].update();
-	// 	particles[i].edges();
-	// }
-
-	particles.update(flowfield);
+	chunks.update(particles.positions);
+	particles.update(flowfield, chunks);
 	particles.push();
 }
 
@@ -42,9 +26,6 @@ function draw() {
 	image(world_texture,0,0);
 
 	// draw particles in between ground and clouds
-	// for (var i = 0; i < particles.length; i++) {
-	// 	particles[i].show();
-	// }
 	particles.show();
 
 	// clouds
