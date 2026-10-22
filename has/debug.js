@@ -1,5 +1,17 @@
 // debug overlay, toggle with the d key
 
+// chunk borders, toggle with the c key
+function drawChunks() {
+	stroke(255, 0, 0);
+	noFill();
+	for (let i = 0; i <= chunks.width; i ++) {
+		line(i * width / chunks.width, 0, i * width / chunks.width, height);
+	}
+	for (let i = 0; i <= chunks.height; i ++) {
+		line(0, i * height / chunks.height, width, i * height / chunks.height);
+	}
+}
+
 function drawDebug() {
 	// only update the fps number every 500ms so it is readable
 	if (millis() - lastFpsUpdate > 500) {

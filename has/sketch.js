@@ -33,11 +33,13 @@ function draw() {
 	image(cloud_texture,0,0);
 	image(light_texture,0,0);
 
+	if (showChunks) drawChunks();
 	if (showDebug) drawDebug();
 }
 
 function keyPressed() {
 	if (key === 'd') showDebug = !showDebug;
+	if (key === 'c') showChunks = !showChunks;
 }
 
 // function windowResized() {

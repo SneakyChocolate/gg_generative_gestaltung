@@ -13,6 +13,7 @@ var chunks;
 var flowfield;
 
 var showDebug = false;
+var showChunks = false;
 var fps = 0;
 var lastFpsUpdate = 0;
 
