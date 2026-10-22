@@ -32,6 +32,12 @@ function draw() {
 	image(shadow_texture,0,0);
 	image(cloud_texture,0,0);
 	image(light_texture,0,0);
+
+	if (showDebug) drawDebug();
+}
+
+function keyPressed() {
+	if (key === 'd') showDebug = !showDebug;
 }
 
 // function windowResized() {

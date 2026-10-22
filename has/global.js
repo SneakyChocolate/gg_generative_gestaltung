@@ -12,6 +12,10 @@ var chunks;
 
 var flowfield;
 
+var showDebug = false;
+var fps = 0;
+var lastFpsUpdate = 0;
+
 var world_noise;
 var world_texture;
 var cloud_texture;
