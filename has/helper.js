@@ -186,17 +186,28 @@ function cloudOffset(x, y, shift = 0) {
 	];
 }
 
-const rain_edge_offset = 10;
-const rain_edge_width = 30;
+const rain_peak_density = clouds_count + 10;
+const rain_density_falloff = 30;
+const rain_max_spawn_tries = 30;
 
+function cloudDensityAt(x, y) {
+	const [noiseX, noiseY] = cloudOffset(x, y);
+	return noise(noiseX, noiseY) * 255;
+}
+
+function rainChanceAt(x, y) {
+	const distanceToPeak = abs(cloudDensityAt(x, y) - rain_peak_density);
+	return map(distanceToPeak, 0, rain_density_falloff, 1, 0, true);
+}
+
+// rain spawns at the cloud edge: thick clouds would hide it, clear sky has no rain
 function rainSpawnPosition() {
-	for (let tries = 0; tries < 30; tries++) {
-		const x = random(width), y = random(height);
-		const [ox, oy] = cloudOffset(x, y);
-		const distance = abs(noise(ox, oy) * 255 - (clouds_count + rain_edge_offset));
-		if (random() < map(distance, 0, rain_edge_width, 1, 0, true)) return createVector(x, y);
+	for (let tries = 0; tries < rain_max_spawn_tries; tries++) {
+		const x = random(width);
+		const y = random(height);
+		if (random() < rainChanceAt(x, y)) return createVector(x, y);
 	}
-	return createVector(random(width), random(height)); 
+	return createVector(random(width), random(height));
 }
 
 // AI-generated (Claude)
