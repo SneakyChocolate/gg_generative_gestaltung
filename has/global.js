@@ -1,5 +1,5 @@
-const width = 400
-const height = 400
+const width = window.innerWidth
+const height = window.innerHeight
 
 var inc = 0.1;
 var scl = 1;

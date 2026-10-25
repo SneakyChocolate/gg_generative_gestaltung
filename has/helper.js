@@ -29,20 +29,34 @@ function hardenWorldMapRgba(height) {
 	return [255,255,255,255];
 }
 
+const normalLayers = [
+	[0.1,0,0,100,255],
+	[0.3,0,0,255,255],
+	[0.35,200,200,100,255],
+	[0.4,20,100,20,255],
+	[0.6,50,150,20,255],
+	[0.65,50,50,50,255],
+	[0.7,100,100,100,255],
+	[0.9,150,150,150,255],
+	[0.91,255,255,255,255],
+	[1,255,255,255,255]
+];
+
+const autumnLayers = [
+	[0.1,0,0,60,255],
+	[0.3,30,40,100,255],
+	[0.35,170,140,80,255],
+	[0.4,110,75,35,255],
+	[0.6,180,120,45,255],
+	[0.65,50,50,50,255],
+	[0.7,100,100,100,255],
+	[0.9,150,150,150,255],
+	[0.91,255,255,255,255],
+	[1,255,255,255,255]
+];
+
 // same as harden world map but just soft edges via lerp
-function lerpWorldMapRgba(height) {
-	let layers = [
-		[0.1,0,0,100,255],
-		[0.3,0,0,255,255],
-		[0.35,200,200,100,255],
-		[0.4,20,100,20,255],
-		[0.6,50,150,20,255],
-		[0.65,50,50,50,255],
-		[0.7,100,100,100,255],
-		[0.9,150,150,150,255],
-		[0.91,255,255,255,255],
-		[1,255,255,255,255]
-	];
+function lerpWorldMapRgba(height, layers = normalLayers) {
 	for (let i = 0; i < layers.length; i ++) {
 		let [until,r,g,b,a] = layers[i];
 		if (until >= height) {
@@ -182,6 +196,24 @@ function terrainHeight(h, x, y) {
 	return constrain(h + detail * 0.4 * weight, 0, 1);
 }
 
+// 0 = normal biome, 1 = autumn biome. very coarse noise -> big patches, soft edges
+function autumnAmount(x, y) {
+	return map(noise(x / 200 + 500, y / 200 + 500), 0.45, 0.55, 0, 1, true);
+}
+
+// noise on the land makes all colors lighter or darker: same hue, only light and shadow
+function autumnLeaves(height, x, y) {
+	const rgba = lerpWorldMapRgba(height, autumnLayers);
+	const isGrass = map(height, 0.35, 0.4, 0, 1, true) * map(height, 0.6, 0.65, 1, 0, true);
+	const shade = (noise(x / 25, y / 25) - 0.5) * 80 * isGrass;
+
+	for (let i = 0; i < 3; i++) {
+		rgba[i] += shade;
+	}
+	
+	return rgba;
+}
+
 function worldmap_setup() {
 	background("white");
 	noiseSeed(0);
@@ -199,7 +231,13 @@ function worldmap_setup() {
 	// world map (world_noise feeds the particle flowfield)
 	world_texture = noiseTexture(
 		(x,y) => [x / 20, y / 20],
-		(b,x,y) => lerpWorldMapRgba(terrainHeight(b/255, x, y)),
+		(b,x,y) => {
+			const height = terrainHeight(b/255, x, y);
+			const normal = lerpWorldMapRgba(height);
+			const autumn = autumnLeaves(height, x, y);
+			const amount = autumnAmount(x, y);
+			return normal.map((value, i) => lerp(value, autumn[i], amount));
+		},
 		customNoise,
 		(x, y, noise_value) => { world_noise[x][y] = noise_value; }
 	);
