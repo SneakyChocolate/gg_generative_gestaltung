@@ -72,7 +72,7 @@ class Particles {
 			const difference = this.positions[a].copy();
 			difference.sub(this.positions[b]);
 			const square_distance = difference.x * difference.x + difference.y * difference.y;
-			if (square_distance < 4) {
+			if (square_distance < 3*3) {
 				const addedAcceleration = difference.copy();
 				addedAcceleration.x = 1 / addedAcceleration.x / 10;
 				addedAcceleration.y = 1 / addedAcceleration.y / 10;
@@ -88,8 +88,8 @@ class Particles {
 	}
 
 	show(pg) {
-		pg.stroke(0,0,255,70);
-		pg.strokeWeight(1.5);
+		pg.stroke(0,0,150,30);
+		pg.strokeWeight(3);
 		for (let i = 0; i < this.length; i ++) {
 			pg.line(this.positions[i].x, this.positions[i].y, this.previousPositions[i].x, this.previousPositions[i].y);
 			this.updatePrev(i);

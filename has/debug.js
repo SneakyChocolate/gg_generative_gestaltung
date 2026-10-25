@@ -6,10 +6,10 @@ function drawChunks() {
 	stroke(255, 0, 0);
 	noFill();
 	for (let i = 0; i <= chunks.width; i ++) {
-		line(i * width / chunks.width, 0, i * width / chunks.width, height);
+		line(i * realwidth / chunks.width, 0, i * realwidth / chunks.width, realheight);
 	}
 	for (let i = 0; i <= chunks.height; i ++) {
-		line(0, i * height / chunks.height, width, i * height / chunks.height);
+		line(0, i * realheight / chunks.height, realwidth, i * realheight / chunks.height);
 	}
 }
 
