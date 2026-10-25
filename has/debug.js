@@ -1,3 +1,4 @@
+// AI-generated (Claude)
 // debug overlay, toggle with the d key
 
 // chunk borders, toggle with the c key
