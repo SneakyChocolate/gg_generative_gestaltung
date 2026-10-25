@@ -14,7 +14,7 @@ class Particles {
 		this.previousPositions = new Array(size);
 
 		for (let i = 0; i < this.length; i ++) {
-			this.positions[i] = createVector(random(width), random(height));
+			this.positions[i] = rainSpawnPosition();
 			this.velocities[i] = createVector(0, 0);
 			this.accelerations[i] = createVector(0, 0);
 			this.maxspeeds[i] = 0.2;
@@ -23,7 +23,7 @@ class Particles {
 	}
 
 	push() {
-		const position = createVector(random(width), random(height));
+		const position = rainSpawnPosition();
 		const velocitie = createVector(0, 0);
 		const acceleration = createVector(0, 0);
 		const maxspeed = 0.2;
@@ -102,7 +102,7 @@ class Particles {
 	}
 
 	respawn(i) {
-		this.positions[i] = createVector(random(width), random(height));
+		this.positions[i] = rainSpawnPosition();
 		this.velocities[i] = createVector(0, 0);
 		this.accelerations[i] = createVector(0, 0);
 	}

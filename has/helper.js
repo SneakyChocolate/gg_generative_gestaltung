@@ -186,6 +186,19 @@ function cloudOffset(x, y, shift = 0) {
 	];
 }
 
+const rain_edge_offset = 10;
+const rain_edge_width = 30;
+
+function rainSpawnPosition() {
+	for (let tries = 0; tries < 30; tries++) {
+		const x = random(width), y = random(height);
+		const [ox, oy] = cloudOffset(x, y);
+		const distance = abs(noise(ox, oy) * 255 - (clouds_count + rain_edge_offset));
+		if (random() < map(distance, 0, rain_edge_width, 1, 0, true)) return createVector(x, y);
+	}
+	return createVector(random(width), random(height)); 
+}
+
 // AI-generated (Claude)
 // base noise gives continents; a second, finer noise only roughens the highlands
 // (weight 0 on water/shore -> smooth coasts, 1 above h=0.65 -> rugged mountains)
@@ -210,7 +223,7 @@ function autumnLeaves(height, x, y) {
 	for (let i = 0; i < 3; i++) {
 		rgba[i] += shade;
 	}
-	
+
 	return rgba;
 }
 
