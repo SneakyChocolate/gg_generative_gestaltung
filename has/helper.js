@@ -331,7 +331,7 @@ function particle_setup() {
 				}
 			}
 
-			if (flows) v.setMag((field - min) * 20);
+			if (flows) v.setMag((field - min) * 50);
 			flowfield[x + y * cols] = v;
 		}
 	}

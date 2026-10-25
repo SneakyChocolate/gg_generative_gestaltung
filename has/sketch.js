@@ -22,8 +22,8 @@ function setup() {
 function update() {
 	chunks.update(particles.positions);
 	particles.update(flowfield, chunks);
-	if (particles.length < 5000) {
-		for (let i = 0; i < 5; i ++) {
+	if (particles.length < 50000) {
+		for (let i = 0; i < 50; i ++) {
 			particles.push();
 		}
 	}

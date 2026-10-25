@@ -80,8 +80,8 @@ class Particles {
 		
 		if (square_distance < 3 * 3) {
 			const addedAcceleration = difference.copy();
-			addedAcceleration.x = 1 / addedAcceleration.x / 10;
-			addedAcceleration.y = 1 / addedAcceleration.y / 10;
+			addedAcceleration.x = 1 / addedAcceleration.x * 10;
+			addedAcceleration.y = 1 / addedAcceleration.y * 10;
 
 			this.accelerations[a].add(addedAcceleration);
 			this.accelerations[b].sub(addedAcceleration);
