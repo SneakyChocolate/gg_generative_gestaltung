@@ -40,8 +40,8 @@ class Particles {
 
 	update(flowfield, chunks) {
 		this.handleFlowfield(flowfield);
-		chunks.iterGroups((chunk) => {
-			this.handleCollision(chunk);
+		chunks.iterCollisionPairs((a, b) => {
+			this.handleCollisionPair(a, b);
 		});
 		this.move();
 		this.edges();
@@ -69,18 +69,23 @@ class Particles {
 	handleCollision(chunk) {
 		iter2(chunk.length, (ai,bi) => {
 			let [a,b] = [chunk[ai], chunk[bi]];
-			const difference = this.positions[a].copy();
-			difference.sub(this.positions[b]);
-			const square_distance = difference.x * difference.x + difference.y * difference.y;
-			if (square_distance < 3*3) {
-				const addedAcceleration = difference.copy();
-				addedAcceleration.x = 1 / addedAcceleration.x / 10;
-				addedAcceleration.y = 1 / addedAcceleration.y / 10;
-
-				this.accelerations[a].add(addedAcceleration);
-				this.accelerations[b].sub(addedAcceleration);
-			}
+			this.handleCollisionPair(a,b);
 		});
+	}
+
+	handleCollisionPair(a, b) {
+		const difference = this.positions[a].copy();
+		difference.sub(this.positions[b]);
+		const square_distance = difference.x * difference.x + difference.y * difference.y;
+		
+		if (square_distance < 3 * 3) {
+			const addedAcceleration = difference.copy();
+			addedAcceleration.x = 1 / addedAcceleration.x / 10;
+			addedAcceleration.y = 1 / addedAcceleration.y / 10;
+
+			this.accelerations[a].add(addedAcceleration);
+			this.accelerations[b].sub(addedAcceleration);
+		}
 	}
 
 	applyForce(i, force) {
