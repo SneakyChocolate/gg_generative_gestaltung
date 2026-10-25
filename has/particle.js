@@ -1,8 +1,10 @@
+// inspired by:
 // Daniel Shiffman
 // http://codingtra.in
 // http://patreon.com/codingtrain
 // Code for: https://youtu.be/BjoM9oKOAKY
 
+// rewritten as SoA
 class Particles {
 	constructor(size) {
 		this.length = size;
@@ -26,7 +28,7 @@ class Particles {
 		const position = rainSpawnPosition();
 		const velocitie = createVector(0, 0);
 		const acceleration = createVector(0, 0);
-		const maxspeed = 0.2;
+		const maxspeed = 0.8;
 		const previousPosition = position.copy();
 
 		this.positions.push(position);
@@ -40,6 +42,7 @@ class Particles {
 
 	update(flowfield, chunks) {
 		this.handleFlowfield(flowfield);
+		// needs collision for fluid simulation
 		chunks.iterCollisionPairs((a, b) => {
 			this.handleCollisionPair(a, b);
 		});
@@ -80,8 +83,7 @@ class Particles {
 		
 		if (square_distance < 3 * 3) {
 			const addedAcceleration = difference.copy();
-			addedAcceleration.x = 1 / addedAcceleration.x * 10;
-			addedAcceleration.y = 1 / addedAcceleration.y * 10;
+			addedAcceleration.setMag(1 / Math.sqrt(square_distance) / 2);
 
 			this.accelerations[a].add(addedAcceleration);
 			this.accelerations[b].sub(addedAcceleration);

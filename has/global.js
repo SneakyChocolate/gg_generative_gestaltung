@@ -1,7 +1,10 @@
 const realwidth = window.innerWidth;
 const realheight = window.innerHeight;
-const width = Math.floor(window.innerWidth / 4);
-const height = Math.floor(window.innerHeight / 4);
+// used for drawing on the offscreen graphics which is then scaled to the real values (above)
+const width = Math.floor(window.innerWidth / 6);
+const height = Math.floor(window.innerHeight / 6);
+// if seed < 0 then its random
+const seed = -1;
 
 var inc = 0.1;
 var scl = 1;
@@ -13,6 +16,7 @@ var particles = [];
 var chunks;
 
 var flowfield;
+var flowstrength = 80;
 
 var showDebug = false;
 var showChunks = false;

@@ -297,19 +297,20 @@ function particle_setup() {
 	rows = floor(height / scl);
 	flowfield = new Array(cols * rows);
 
+	const around = [
+		[1,0], // 90
+		[1,-1], // 135
+		[0,-1], // 180
+		[-1,-1], // 225
+		[-1,0], // 270
+		[-1,1], // 315
+		[0,1], // 0
+		[1,1], // 45
+	];
+
 	for (let x = 0; x < cols; x++) {
 		for (let y = 0; y < rows; y++) {
 			const field = world_noise[x][y];
-			const around = [
-				[1,0], // 90
-				[1,-1], // 135
-				[0,-1], // 180
-				[-1,-1], // 225
-				[-1,0], // 270
-				[-1,1], // 315
-				[0,1], // 0
-				[1,1], // 45
-			];
 			var min = field;
 			var v = createVector(0, 0);
 			var flows = false;
@@ -331,7 +332,7 @@ function particle_setup() {
 				}
 			}
 
-			if (flows) v.setMag((field - min) * 50);
+			if (flows) v.setMag((field - min) * flowstrength / v.mag());
 			flowfield[x + y * cols] = v;
 		}
 	}
