@@ -2,10 +2,11 @@
 // particle fluid simulation optimizations
 
 function setup() {
-	chunks = new GridChunks(20, 20, (position) => {
+	// spatial chunking for improving the performance of particle collisions (fluid simulation for rain creating lakes)
+	chunks = new GridChunks(100, 100, (position) => {
 		return [
-			Math.floor(position.x / width * 20),
-			Math.floor(position.y / height * 20)
+			Math.floor(position.x / width * 100),
+			Math.floor(position.y / height * 100)
 		];
 	});
 	worldmap_setup();
@@ -15,7 +16,9 @@ function setup() {
 function update() {
 	chunks.update(particles.positions);
 	particles.update(flowfield, chunks);
-	particles.push();
+	for (let i = 0; i < 20; i ++) {
+		particles.push();
+	}
 }
 
 function draw() {

@@ -343,7 +343,7 @@ function particle_setup() {
 	// for (var i = 0; i < 300; i++) {
 	// 	particles[i] = new Particle();
 	// }
-	particles = new Particles(10000);
+	particles = new Particles(10);
 }
 
 function iter(list, handle_fn) {
