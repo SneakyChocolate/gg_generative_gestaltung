@@ -1,5 +1,7 @@
-const width = window.innerWidth
-const height = window.innerHeight
+const realwidth = window.innerWidth;
+const realheight = window.innerHeight;
+const width = Math.floor(window.innerWidth / 4);
+const height = Math.floor(window.innerHeight / 4);
 
 var inc = 0.1;
 var scl = 1;

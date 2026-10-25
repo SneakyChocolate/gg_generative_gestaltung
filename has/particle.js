@@ -42,7 +42,7 @@ class Particles {
 		this.handleFlowfield(flowfield);
 		chunks.iterGroups((chunk) => {
 			this.handleCollision(chunk);
-		})
+		});
 		this.move();
 		this.edges();
 	}
@@ -87,11 +87,11 @@ class Particles {
 		this.accelerations[i].add(force);
 	}
 
-	show() {
-		stroke(0,0,255,70);
-		strokeWeight(1.5);
+	show(pg) {
+		pg.stroke(0,0,255,70);
+		pg.strokeWeight(1.5);
 		for (let i = 0; i < this.length; i ++) {
-			line(this.positions[i].x, this.positions[i].y, this.previousPositions[i].x, this.previousPositions[i].y);
+			pg.line(this.positions[i].x, this.positions[i].y, this.previousPositions[i].x, this.previousPositions[i].y);
 			this.updatePrev(i);
 		}
 	}

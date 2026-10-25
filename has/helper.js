@@ -239,10 +239,6 @@ function autumnLeaves(height, x, y) {
 }
 
 function worldmap_setup() {
-	background("white");
-	noiseSeed(0);
-	createCanvas(width, height);
-	pixelDensity(1);
 	print(`Canvas size is ${width}x${height}`);
 
 	world_noise = new Array(width);

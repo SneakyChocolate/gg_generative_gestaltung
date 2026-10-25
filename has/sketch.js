@@ -2,11 +2,17 @@
 // particle fluid simulation optimizations
 
 function setup() {
+	background("white");
+	noiseSeed(0);
+	createCanvas(realwidth, realheight);
+	pixelDensity(1);
+
 	// spatial chunking for improving the performance of particle collisions (fluid simulation for rain creating lakes)
-	chunks = new GridChunks(100, 100, (position) => {
+	const chunksize = 40;
+	chunks = new GridChunks(chunksize, chunksize, (position) => {
 		return [
-			Math.floor(position.x / width * 100),
-			Math.floor(position.y / height * 100)
+			Math.floor(position.x / width * chunksize),
+			Math.floor(position.y / height * chunksize)
 		];
 	});
 	worldmap_setup();
@@ -16,8 +22,10 @@ function setup() {
 function update() {
 	chunks.update(particles.positions);
 	particles.update(flowfield, chunks);
-	for (let i = 0; i < 20; i ++) {
-		particles.push();
+	if (particles.length < 5000) {
+		for (let i = 0; i < 5; i ++) {
+			particles.push();
+		}
 	}
 }
 
@@ -25,14 +33,19 @@ function draw() {
 	// seperate drawing from calculations
 	update();
 
+	// use offscreen graphics for scaled rendering
+	let pg = createGraphics(width, height);
+
 	// this part below is for drawing
-	image(world_texture,0,0);
+	pg.image(world_texture,0,0);
 
 	// draw particles in between ground and clouds
-	particles.show();
+	particles.show(pg);
 
 	// clouds
-	image(sky_texture,0,0);
+	pg.image(sky_texture,0,0);
+
+	image(pg, 0, 0, realwidth, realheight);
 
 	if (showChunks) drawChunks();
 	if (showDebug) drawDebug();
