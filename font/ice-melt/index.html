@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <title>EIS</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.6.0/p5.js"></script>
+  <style>
+    html, body { margin: 0; overflow: hidden; background: #0a0a14; }
+    canvas { display: block; }
+  </style>
+</head>
+<body>
+<script>
+const WORD = "EIS";
+const STEP = 5;              // Sampling-Abstand; Partikelzahl ~ 1/STEP²
+const SPRING_K = 0.05;       // Kraft 1: Federkonstante bei temp = 0
+const SPRING_MAX = 0.3;      // Kraft 1: Obergrenze, damit Refrost langsam zurückkriecht
+const GRAVITY = 0.15;        // Kraft 2
+const SUN_HEAT = 0.008;      // Kraft 3: Wärmezufuhr pro Frame bei Mittagssonne
+const AIR_RATE = 0.02;       // Angleichung an die Lufttemperatur pro Frame
+const WIND_SCALE = 0.003;    // Kraft 4: Raumfrequenz des Noise-Felds
+const WIND_FORCE = 0.12;     // Kraft 4: maximale Böenstärke
+const MOUSE_RADIUS = 90;     // Kraft 5: warme Hand
+const MOUSE_HEAT = 0.03;
+const DRAG = 0.06;           // Kraft 6: Reibungskoeffizient (F = -c * v)
+const MELT_T = 0.6;          // ab hier flüssig
+const FREEZE_T = 0.25;       // ab hier wieder fest (Hysterese, sonst flackert es)
+const DAY_FRAMES = 3600;     // ein Tag = 60 s bei 60 fps
+const POOL_DEPTH = 40;       // Tiefe der Pfütze vor den Buchstaben
+
+// Farbverläufe als RGB-Stopps (lerp in HSB würde über Grün laufen)
+const ICE_COLORS = [[120, 220, 255], [240, 250, 255], [255, 230, 140], [255, 150, 60]];
+const DROP_COLORS = [[40, 90, 200], [200, 235, 255]];
+const SKY_TOP = [[8, 10, 30], [40, 50, 100], [70, 140, 220]];
+const SKY_HORIZON = [[20, 25, 55], [250, 150, 80], [190, 225, 250]];
+
+let particles = [];
+let groundY, wordCenterX, wordHalfWidth, letterHeight;
+let dayTime = 0;             // 0 = Sonnenaufgang, 0.5 = Sonnenuntergang
+let timeSpeed = 1;
+let sun = { x: 0, y: 0, height: 0, dirX: 0 };
+let airTemp = 0;
+let wind = 0;
+
+class Particle {
+  constructor(x, y) {
+    this.homeX = x; this.homeY = y;
+    this.x = x;     this.y = y;
+    this.vx = 0;    this.vy = 0;
+    this.ax = 0;    this.ay = 0;
+    this.temp = 0.05;
+    this.liquid = false;
+    // Lage im Wort: -1 links .. 1 rechts, 0 unten .. 1 oben
+    this.side = (x - wordCenterX) / wordHalfWidth;
+    this.top = (groundY - y) / letterHeight;
+    this.jitter = random(0.8, 1.2);           // unregelmäßige Schmelzkante
+    this.floorY = groundY + random(POOL_DEPTH); // wo der Tropfen in der Pfütze liegt
+  }
+
+  update(time) {
+    // Wärme: Sonne trifft zuerst die Oberseite und die ihr zugewandte Seite
+    const exposure = ((0.5 + 0.5 * this.side * sun.dirX) + this.top) / 2 * this.jitter;
+    this.temp += (airTemp - this.temp) * AIR_RATE + max(0, sun.height) * SUN_HEAT * exposure;
+    if (mouseIsPressed) {
+      const d = dist(mouseX, mouseY, this.x, this.y);
+      if (d < MOUSE_RADIUS) this.temp += MOUSE_HEAT * (1 - d / MOUSE_RADIUS);
+    }
+    this.temp = constrain(this.temp, 0, 1);
+    if (!this.liquid && this.temp > MELT_T) this.liquid = true;
+    if (this.liquid && this.temp < FREEZE_T) this.liquid = false;
+
+    // Kraft 1: Feder zur Heimat, wird weicher je wärmer das Eis ist
+    if (!this.liquid) {
+      const k = SPRING_K * (1 - this.temp / MELT_T);
+      let fx = (this.homeX - this.x) * k, fy = (this.homeY - this.y) * k;
+      const f = Math.sqrt(fx * fx + fy * fy);
+      if (f > SPRING_MAX) { fx *= SPRING_MAX / f; fy *= SPRING_MAX / f; }
+      this.ax += fx; this.ay += fy;
+    }
+
+    // Kraft 2: Schwerkraft
+    this.ay += GRAVITY;
+
+    // Kraft 4: Wind; Richtung leicht verwirbelt durch Noise, Stärke = globale Böe
+    const a = (noise(this.x * WIND_SCALE, this.y * WIND_SCALE, time) - 0.5) * PI;
+    this.ax += Math.cos(a) * wind;
+    this.ay += Math.sin(a) * Math.abs(wind) * 0.5;
+
+    // Kraft 6: viskose Reibung
+    this.ax -= this.vx * DRAG;
+    this.ay -= this.vy * DRAG;
+
+    // Integration (Euler), Beschleunigung zurücksetzen
+    this.vx += this.ax; this.vy += this.ay;
+    this.x += this.vx;  this.y += this.vy;
+    this.ax = 0; this.ay = 0;
+
+    // Boden: Tropfen bleiben in der Pfütze liegen und rutschen nur noch
+    if (this.y > this.floorY) {
+      this.y = this.floorY;
+      this.vy *= -0.2;
+      this.vx *= 0.85;
+    }
+    if (this.x < 0 || this.x > width) {
+      this.x = constrain(this.x, 0, width);
+      this.vx *= -0.5;
+    }
+  }
+
+  // Farbe = Kraft: Eis zeigt Temperatur, Wasser zeigt Geschwindigkeit
+  color() {
+    if (this.liquid) return gradient(DROP_COLORS, Math.sqrt(this.vx * this.vx + this.vy * this.vy) / 6);
+    return gradient(ICE_COLORS, this.temp / MELT_T);
+  }
+}
+
+function gradient(stops, t) {
+  t = constrain(t, 0, 1) * (stops.length - 1);
+  const i = Math.min(Math.floor(t), stops.length - 2);
+  const f = t - i, a = stops[i], b = stops[i + 1];
+  return [a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f, a[2] + (b[2] - a[2]) * f];
+}
+
+function rgb(c, alpha = 1) {
+  return `rgba(${c[0] | 0},${c[1] | 0},${c[2] | 0},${alpha})`;
+}
+
+function buildParticles() {
+  particles = [];
+  groundY = height * 0.68;
+  const size = min(width / (WORD.length * 0.75), height * 0.45);
+  const g = createGraphics(width, height);
+  g.pixelDensity(1);
+  g.background(0);
+  g.fill(255);
+  g.noStroke();
+  g.textAlign(CENTER, BASELINE);
+  g.textStyle(BOLD);
+  g.textSize(size);
+  g.text(WORD, width / 2, groundY);
+  wordCenterX = width / 2;
+  wordHalfWidth = g.textWidth(WORD) / 2;
+  letterHeight = g.textAscent();
+  g.loadPixels();
+  // Pixel-Sampling: jeder STEP-te helle Pixel wird ein Partikel
+  for (let y = 0; y < height; y += STEP) {
+    for (let x = 0; x < width; x += STEP) {
+      if (g.pixels[(y * width + x) * 4] > 128) particles.push(new Particle(x, y));
+    }
+  }
+  g.remove();
+}
+
+function setup() {
+  createCanvas(windowWidth, windowHeight);
+  pixelDensity(1);
+  buildParticles();
+}
+
+// Tageszeit treibt Sonne, Lufttemperatur und Himmelsfarbe gleichzeitig
+function updateDay() {
+  dayTime = (dayTime + timeSpeed / DAY_FRAMES) % 1;
+  const angle = dayTime * TWO_PI;
+  const arc = width * 0.45;
+  sun.height = Math.sin(angle);
+  sun.dirX = -Math.cos(angle);  // Aufgang links, Untergang rechts
+  sun.x = wordCenterX + sun.dirX * arc;
+  sun.y = groundY - sun.height * arc * 0.8;
+  airTemp = 0.2 + 0.25 * sun.height;
+  wind = (noise(frameCount * 0.003) - 0.5) * 2 * WIND_FORCE;
+}
+
+function drawScene() {
+  // Himmel: Nacht -> Morgenrot -> Tag, gesteuert von der Sonnenhöhe
+  const h = sun.height;
+  const skyT = h < 0 ? map(h, -0.3, 0, 0, 0.5, true) : map(h, 0, 0.5, 0.5, 1, true);
+  const horizon = gradient(SKY_HORIZON, skyT);
+  let grad = drawingContext.createLinearGradient(0, 0, 0, groundY);
+  grad.addColorStop(0, rgb(gradient(SKY_TOP, skyT)));
+  grad.addColorStop(1, rgb(horizon));
+  drawingContext.fillStyle = grad;
+  drawingContext.fillRect(0, 0, width, groundY);
+
+  // Sonne mit Glühen
+  drawingContext.shadowBlur = 60;
+  drawingContext.shadowColor = 'rgba(255,180,90,0.8)';
+  noStroke();
+  fill(255, 220, 150);
+  circle(sun.x, sun.y, 70);
+  drawingContext.shadowBlur = 0;
+
+  // Gefrorener See: spiegelt den Horizont, wird nach vorne dunkler
+  const ice = gradient([horizon, [210, 230, 240]], 0.3);
+  grad = drawingContext.createLinearGradient(0, groundY, 0, height);
+  grad.addColorStop(0, rgb(ice));
+  grad.addColorStop(1, rgb(ice.map(v => v * 0.35)));
+  drawingContext.fillStyle = grad;
+  drawingContext.fillRect(0, groundY, width, height - groundY);
+  stroke(255, 120);
+  strokeWeight(1);
+  line(0, groundY, width, groundY);
+}
+
+function draw() {
+  updateDay();
+  drawScene();
+
+  const time = frameCount * 0.004;
+  let pooled = 0, pooledX = 0;
+  for (let i = 0; i < particles.length; i++) {
+    const p = particles[i];
+    p.update(time);
+    if (p.liquid && p.y >= groundY) { pooled++; pooledX += p.x; }
+  }
+
+  // Pfütze: wächst mit der Menge an Wasser, liegt dort wo der Wind es hintreibt
+  if (pooled > 0) {
+    noStroke();
+    fill(60, 110, 180, 90);
+    ellipse(pooledX / pooled, groundY + POOL_DEPTH / 2, Math.sqrt(pooled) * 14, POOL_DEPTH * 1.6);
+  }
+
+  // Spiegelung im Eis, dann die Partikel selbst
+  for (let i = 0; i < particles.length; i++) {
+    const p = particles[i];
+    const c = p.color();
+    if (p.y < groundY) {
+      strokeWeight(4);
+      stroke(c[0], c[1], c[2], 40);
+      point(p.x, 2 * groundY - p.y);
+    }
+    strokeWeight(p.liquid ? 3 : 4);
+    stroke(c[0], c[1], c[2]);
+    point(p.x, p.y);
+  }
+
+  // Warme Hand sichtbar machen
+  if (mouseIsPressed) {
+    noStroke();
+    fill(255, 160, 80, 40);
+    circle(mouseX, mouseY, MOUSE_RADIUS * 2);
+  }
+
+  const hour = (dayTime * 24 + 6) % 24;
+  const melted = particles.filter(p => p.liquid).length / particles.length;
+  noStroke();
+  fill(255, 200);
+  textSize(12);
+  textAlign(LEFT, TOP);
+  text(`${nf(floor(hour), 2)}:${nf(floor(hour % 1 * 60), 2)}   Luft ${airTemp.toFixed(2)}   Wind ${wind.toFixed(2)}   geschmolzen ${(melted * 100).toFixed(0)}%   |  Maus halten = warme Hand  |  + / - = Zeitraffer (${timeSpeed}x)`, 12, 12);
+}
+
+function keyPressed() {
+  if (key === '+') timeSpeed = min(8, timeSpeed * 2);
+  if (key === '-') timeSpeed = max(0.25, timeSpeed / 2);
+}
+
+function windowResized() {
+  resizeCanvas(windowWidth, windowHeight);
+  buildParticles();
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <title>Pressure & Temperature</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.6.0/p5.js"></script>
+  <style>
+    body { margin: 0; background: #0a0a12; color: #889; font: 13px monospace; text-align: center; }
+    canvas { display: block; margin: 0 auto; }
+    p { margin: 8px; }
+  </style>
+</head>
+<body>
+<p>Klick / schnelle Mausbewegung = Druckwelle · <b>+</b> / <b>-</b> oder Slider = Temperatur · <b>0</b> = abkühlen</p>
+<script>
+const WORD = "PRESSURE";
+const STEP = 5;            // Abstand beim Pixel-Sampling (größer = weniger Partikel)
+const SPRING = 0.05;       // Federkonstante k
+const DAMPING = 0.88;      // Reibung pro Frame
+const SHOCK_RADIUS = 180;
+const SHOCK_FORCE = 40;
+const GAS_THRESHOLD = 0.7; // ab dieser Temperatur löst sich die Feder
+
+let particles = [];
+let temperature = 0;       // 0 = fest, 1 = Gas
+let slider;
+
+class Particle {
+  constructor(x, y) {
+    this.home = createVector(x, y);
+    this.pos = createVector(x, y);
+    this.vel = createVector(0, 0);
+    this.seed = random(1000); // eigener Noise-Offset je Partikel
+  }
+
+  update() {
+    // Federkraft (Hooke): F = k * (home - pos), schwächer bei hoher Temperatur
+    const spring = map(temperature, GAS_THRESHOLD - 0.2, GAS_THRESHOLD + 0.1, SPRING, 0, true);
+    const pull = p5.Vector.sub(this.home, this.pos).mult(spring);
+    this.vel.add(pull);
+
+    // Temperatur: Perlin-Noise-Zittern, bei Gas zusätzlich driftende Kraft
+    const t = frameCount * 0.01;
+    const angle = noise(this.seed, t) * TWO_PI * 2;
+    const jitter = temperature * temperature * 2.5;
+    this.vel.add(cos(angle) * jitter, sin(angle) * jitter);
+
+    this.vel.mult(DAMPING);
+    this.pos.add(this.vel);
+
+    // Gasmoleküle prallen an den Wänden ab
+    if (this.pos.x < 0 || this.pos.x > width)  { this.vel.x *= -1; this.pos.x = constrain(this.pos.x, 0, width); }
+    if (this.pos.y < 0 || this.pos.y > height) { this.vel.y *= -1; this.pos.y = constrain(this.pos.y, 0, height); }
+  }
+
+  // Druckwelle: radialer Impuls, fällt mit Abstand ab
+  shock(origin, strength) {
+    const away = p5.Vector.sub(this.pos, origin);
+    const d = away.mag();
+    if (d < SHOCK_RADIUS && d > 0.1) {
+      away.setMag(strength * (1 - d / SHOCK_RADIUS));
+      this.vel.add(away);
+    }
+  }
+
+  show() {
+    // Farbe von blau (kalt) über weiß nach orange (heiß), plus Geschwindigkeit
+    const heat = constrain(temperature + this.vel.mag() * 0.05, 0, 1);
+    stroke(lerpColor(color(80, 160, 255), color(255, 120, 40), heat));
+    point(this.pos.x, this.pos.y);
+  }
+}
+
+function setup() {
+  createCanvas(800, 600);
+  slider = createSlider(0, 1, 0, 0.01);
+  slider.style('width', '300px');
+
+  // Text in Offscreen-Buffer zeichnen
+  const g = createGraphics(width, height);
+  g.pixelDensity(1);
+  g.background(0);
+  g.fill(255);
+  g.noStroke();
+  g.textAlign(CENTER, CENTER);
+  g.textStyle(BOLD);
+  g.textSize(140);
+  g.text(WORD, width / 2, height / 2);
+  g.loadPixels();
+
+  // Pixel-Sampling: jeder STEP-te Pixel, der hell ist, wird ein Partikel
+  for (let y = 0; y < height; y += STEP) {
+    for (let x = 0; x < width; x += STEP) {
+      if (g.pixels[(y * width + x) * 4] > 128) particles.push(new Particle(x, y));
+    }
+  }
+  g.remove();
+  strokeWeight(3);
+}
+
+function draw() {
+  background(10, 10, 18, 70); // leichter Nachzieheffekt
+  temperature = slider.value();
+
+  // schnelle Mausbewegung erzeugt einen kleinen Stoß
+  if (mouseIsPressed === false && dist(mouseX, mouseY, pmouseX, pmouseY) > 25) {
+    shockwave(mouseX, mouseY, SHOCK_FORCE * 0.3);
+  }
+
+  drawingContext.shadowBlur = 8; // Leuchten
+  drawingContext.shadowColor = 'rgba(120,180,255,0.6)';
+  for (const p of particles) { p.update(); p.show(); }
+  drawingContext.shadowBlur = 0;
+}
+
+function shockwave(x, y, strength) {
+  const origin = createVector(x, y);
+  for (const p of particles) p.shock(origin, strength);
+}
+
+function mousePressed() {
+  if (mouseY < height) shockwave(mouseX, mouseY, SHOCK_FORCE);
+}
+
+function keyPressed() {
+  if (key === '+') slider.value(min(1, slider.value() + 0.05));
+  if (key === '-') slider.value(max(0, slider.value() - 0.05));
+  if (key === '0') slider.value(0);
+}
+</script>
+</body>
+</html>

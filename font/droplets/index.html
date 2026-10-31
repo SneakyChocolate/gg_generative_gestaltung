@@ -1,0 +1,574 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <title>REGEN</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.6.0/p5.js"></script>
+  <style>
+    html, body { margin: 0; overflow: hidden; background: #0a0a14; }
+    canvas { display: block; }
+  </style>
+</head>
+<body>
+<script>
+const WORD = "REGEN";
+const STEP = 6;              // Abstand der Film-Partikel im Wort
+const R_MIN = 2.6;           // Startradius der Film-Partikel; so groß, dass die Metaballs sofort zusammenhängen
+const R_MAX = 3.4;
+const FILM_MIN_R = 2.6;      // dünner gibt der Film kein Wasser mehr ab (Oberflächenspannung hält ihn);
+                             // die Mitte zwischen 4 Nachbarn (Abstand STEP * 0.71) liegt erst ab r ≈ 2.48 über der Schwelle
+const GRAVITY = 0.12;        // Kraft 1: Gewicht ∝ Masse (r²), Beschleunigung daher für alle gleich
+const ADHESION = 0.55;       // Kraft 2: Haftung ∝ Umfang (r); Tropfen läuft erst ab r > ADHESION / GRAVITY (~4.6 px)
+const WET_EASE = 0.5;        // Kraft 2: auf nassem Glas haftet ein Tropfen bis zu 50 % schwächer
+const COHESION = 0.04;       // Kraft 3: Anziehung naher Tropfen
+const COHESION_RANGE = 6;    // Kraft 3: Reichweite über den Rand hinaus
+const WIND_FORCE = 0.15;     // Kraft 4: Wind greift an der Fläche an (∝ r), Beschleunigung also ∝ 1/r (Trägheit)
+const WIGGLE = 0.06;         // Kraft 5: Unebenheiten im Glas lassen Rinnsale schlängeln
+const WIGGLE_SCALE = 0.03;
+const PATH_FORCE = 0.08;     // Kraft 6: laufende Tropfen lenken zu alten, nassen Spuren
+const VISCOSITY = 0.2;       // Kraft 7: Reibung c = VISCOSITY / r
+                             // Endgeschwindigkeit: GRAVITY - hold = c * v  =>  v = (GRAVITY - ADHESION / r) * r / VISCOSITY
+const FILM_FLOW = 0.004 / VISCOSITY; // Anteil Wasser, der pro Frame im Film nach unten fließt (zäher = langsamer)
+const SURFACE_TENSION = 3;   // bis zu diesem Radius bleibt ein laufender Tropfen rund
+const MAX_STRETCH = 1.5;     // längster Schweif eines laufenden Tropfens (Vielfaches des Radius)
+const STOP_SPEED = 0.3;      // darunter bleibt ein Tropfen wieder kleben
+const TRAIL_CHANCE = 0.08;   // laufende Tropfen verlieren unterwegs kleine Tropfen
+const TRAIL_MIN_R = 3;
+const MERGE_DELAY = 15;      // Frames, bevor ein neuer Tropfen verschmelzen darf (sonst schluckt die Spur sich selbst)
+const CELL = 48;             // Rastergröße für die Nachbarsuche
+const WET_CELL = 8;          // Rastergröße der Nässe-Karte
+const WET_DECAY = 0.999;     // Spuren trocknen langsam (~11 s Halbwertszeit)
+const MAX_DROPS = 5000;      // ponytail: harte Obergrenze statt Optimierung; Regen pausiert, bis Tropfen ablaufen
+
+// Metaballs + Optik
+const META_CELL = 2;         // Rasterauflösung der Metaballs in px
+const META_MIN_R = 1.5;      // kleinere Tröpfchen fallen durchs Raster und werden als Kreis gemalt
+const META_INFLUENCE = 2.2;  // Einflussradius eines Tropfens = r * 2.2
+const META_T = (1 - 1 / (META_INFLUENCE * META_INFLUENCE)) ** 2; // Schwelle: einzelner Tropfen hat genau Radius r
+const HEIGHT_CAP = META_T + 0.2; // Feld oberhalb gilt als flach, damit der Film innen glatt ist
+const BUMP = 2.5;            // wie stark das Feldgefälle die Normale kippt (Wölbung)
+const REFRACT = 18;          // max. Verschiebung des Hintergrunds am Rand (Brechung)
+const EDGE_DARK = 0.6;       // Totalreflexion macht den Rand dunkel
+const LIGHT = norm3([-0.5, -0.7, 1]);                     // Licht von oben links vorne
+const HALF = norm3([LIGHT[0], LIGHT[1], LIGHT[2] + 1]);   // Blinn-Phong: Mitte zwischen Licht und Blick (0, 0, 1)
+const SHININESS = 60;
+const F0 = 0.04;             // Fresnel (Schlick): Wasser spiegelt bei senkrechtem Blick ~4 %
+const REFLECT_COLOR = [190, 200, 225]; // was die Scheibe spiegelt (Zimmerlicht)
+
+// Umgebung
+const WIPE_RADIUS = 30;
+const BREATH_RADIUS = 80;
+const FOG_COLOR = [185, 195, 210];
+const FOG_OPACITY = 0.55;
+const FOG_REGROW = 12;       // Alpha pro Nachwachs-Schritt; nicht kleiner, sonst verfärbt Rundung bei kleinem Alpha den Beschlag
+const FOG_REGROW_EVERY = 36; // Frames zwischen zwei Schritten (~13 s bis der Beschlag wieder dicht ist)
+const FRAME = 22;            // Fensterrahmen
+const CITY_BLUR = 5;         // Stadt wird klein gemalt und hochskaliert = Unschärfe hinter der Scheibe
+
+// Farbverläufe als RGB-Stopps
+const SKY = [[10, 12, 30], [45, 30, 70], [130, 70, 55]];
+const BUILDINGS = [[40, 36, 60], [26, 24, 40], [14, 13, 22]];
+const WINDOW_COLORS = [[255, 200, 120], [255, 230, 170], [180, 220, 255], [255, 150, 90]];
+const BOKEH_COLORS = [[255, 160, 60], [255, 60, 50], [255, 240, 200], [80, 200, 220]];
+const SPEED_COLORS = [[30, 40, 60], [90, 170, 230], [210, 245, 255]];
+
+let drops = [];
+let city, fog, meta;
+let wet, wetCols, wetRows;
+let filmGrid, filmCols, filmRows;
+let wordMassTotal = 0;
+let rainRate = 1;
+let wind = 0;
+
+class Drop {
+  constructor(x, y, r) {
+    this.x = x; this.y = y; this.r = r;
+    this.vx = 0; this.vy = 0;
+    this.ax = 0; this.ay = 0;
+    this.moving = false;
+    this.film = false;          // Teil des Wasserfilms im Wort
+    this.alive = true;
+    this.wordMass = 0;          // Anteil der Masse, der noch vom Wort stammt
+    this.born = frameCount;
+    this.seed = random(1000);
+  }
+
+  get mass() { return this.r * this.r; }
+
+  update() {
+    // Kraft 1 + 4: Schwerkraft und Wind; Kraft 3 (Kohäsion) steht schon in ax/ay
+    let ax = this.ax + wind / this.r, ay = this.ay + GRAVITY;
+    if (this.moving) {
+      // Kraft 5: Glasunebenheiten
+      ax += (noise(this.seed, this.y * WIGGLE_SCALE) - 0.5) * WIGGLE;
+      // Kraft 6: Weg des geringsten Widerstands, zur nasseren Seite unterhalb
+      const below = this.y + this.r + WET_CELL;
+      ax += (wetAt(this.x + WET_CELL, below) - wetAt(this.x - WET_CELL, below)) * PATH_FORCE;
+    }
+
+    // Kraft 2: Haftung wächst mit dem Umfang (r), das Gewicht mit der Fläche (r²).
+    // Pro Masse bleibt ADHESION / r: kleine Tropfen kleben, große reißen ab.
+    // Nasses Glas hält schwächer; der Film ist selbst schon Wasser, für ihn gilt das nicht.
+    const wetness = this.film ? 0 : wetAt(this.x, this.y + this.r);
+    const hold = ADHESION / this.r * (1 - WET_EASE * wetness);
+    const a = Math.sqrt(ax * ax + ay * ay);
+    const speed = Math.sqrt(this.vx * this.vx + this.vy * this.vy);
+    if (a < hold) {
+      if (!this.moving || speed < STOP_SPEED) {   // Haftreibung: steht still
+        this.moving = false;
+        this.vx = 0; this.vy = 0;
+        return;
+      }
+      ax = 0; ay = 0;                             // rollt nur noch aus
+    } else {
+      ax *= (a - hold) / a; ay *= (a - hold) / a; // Gleitreibung: Haftung bremst
+      this.moving = true;
+      this.film = false;                          // reißt aus dem Film ab
+      this.wordMass = 0;                          // hat das Wort verlassen
+    }
+
+    // Kraft 7: Viskosität; große Tropfen werden relativ weniger gebremst und laufen schneller
+    const c = VISCOSITY / this.r;
+    ax -= this.vx * c;
+    ay -= this.vy * c;
+
+    // Integration (Euler)
+    this.vx += ax; this.vy += ay;
+    this.x += this.vx; this.y += this.vy;
+
+    // Spur: kleiner Tropfen bleibt hinten liegen, Fläche bleibt erhalten
+    if (this.r > TRAIL_MIN_R && random() < TRAIL_CHANCE) {
+      const t = random(0.8, 1.4);
+      this.r = Math.sqrt(this.mass - t * t);
+      drops.push(new Drop(this.x + random(-1, 1), this.y - this.r, t));
+    }
+
+    // Kollision mit dem Fensterrahmen
+    if (this.x < FRAME || this.x > width - FRAME) { this.x = constrain(this.x, FRAME, width - FRAME); this.vx = 0; }
+    if (this.y - this.r > height - FRAME) this.alive = false;
+  }
+
+  // nur für Tröpfchen unter META_MIN_R: aufgehellte Farbe der Stadt dahinter
+  draw() {
+    const c = cityColor(this.x, this.y);
+    noStroke();
+    fill(c[0] + (255 - c[0]) * 0.35, c[1] + (255 - c[1]) * 0.35, c[2] + (255 - c[2]) * 0.35);
+    circle(this.x, this.y, this.r * 2);
+  }
+}
+
+function norm3(v) {
+  const l = Math.sqrt(v[0] * v[0] + v[1] * v[1] + v[2] * v[2]);
+  return [v[0] / l, v[1] / l, v[2] / l];
+}
+
+function wetAt(x, y) {
+  const c = constrain(Math.floor(x / WET_CELL), 0, wetCols - 1);
+  const r = constrain(Math.floor(y / WET_CELL), 0, wetRows - 1);
+  return wet[c + r * wetCols];
+}
+
+function filmAt(col, row) {
+  if (col < 0 || row < 0 || col >= filmCols || row >= filmRows) return null;
+  const d = filmGrid[col + row * filmCols];
+  return d && d.alive && d.film ? d : null;
+}
+
+// Wasser im Film fließt nach unten, zum Nachbarn mit dem wenigsten Wasser (Weg des geringsten Widerstands).
+// An den Unterkanten der Buchstaben sammelt es sich, bis der Tropfen schwer genug ist und abreißt.
+function flowFilm() {
+  for (const d of drops) {
+    if (!d.film || !d.alive) continue;
+    let target = null;
+    for (const dc of [0, -1, 1]) {
+      const t = filmAt(d.col + dc, d.row + 1);
+      if (t && (!target || t.mass < target.mass)) target = t;
+    }
+    if (!target) continue;
+    const flow = Math.max(0, d.mass - FILM_MIN_R * FILM_MIN_R) * FILM_FLOW;
+    if (flow === 0) continue;
+    const wordFlow = d.wordMass * flow / d.mass;
+    d.wordMass -= wordFlow;
+    target.wordMass += wordFlow;
+    d.r = Math.sqrt(d.mass - flow);
+    target.r = Math.sqrt(target.mass + flow);
+  }
+}
+
+function buildGrids() {
+  const w = Math.ceil(width / META_CELL), h = Math.ceil(height / META_CELL);
+  const canvas = document.createElement('canvas');
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext('2d');
+  meta = { w, h, canvas, ctx, img: ctx.createImageData(w, h), field: new Float32Array(w * h), speed: new Float32Array(w * h) };
+  wetCols = Math.ceil(width / WET_CELL);
+  wetRows = Math.ceil(height / WET_CELL);
+  wet = new Float32Array(wetCols * wetRows);
+}
+
+// Metaballs: jeder Tropfen addiert w = (1 - d²/R²)² im Umkreis R = r * META_INFLUENCE.
+// Wo die Summe über META_T liegt, ist Wasser. Nahe Tropfen bilden so eine Brücke, bevor sie verschmelzen.
+function drawMetaballs() {
+  const { w, h, field, speed, img } = meta;
+  field.fill(0);
+  speed.fill(0);
+  for (const d of drops) {
+    if (d.r < META_MIN_R) continue;
+    const v = Math.sqrt(d.vx * d.vx + d.vy * d.vy);
+    // Oberflächenspannung hält kleine Tropfen rund; große laufende ziehen einen Schweif nach hinten
+    let ux = 0, uy = 0, stretch = 1;
+    if (d.moving && v > 0.05) {
+      ux = d.vx / v; uy = d.vy / v;
+      stretch = 1 + Math.min(MAX_STRETCH, v * 0.5) * Math.max(0, 1 - SURFACE_TENSION / d.r);
+    }
+    const R = d.r * META_INFLUENCE, R2 = R * R, B = R * stretch;
+    const x0 = Math.max(0, Math.floor((d.x - B) / META_CELL)), x1 = Math.min(w - 1, Math.ceil((d.x + B) / META_CELL));
+    const y0 = Math.max(0, Math.floor((d.y - B) / META_CELL)), y1 = Math.min(h - 1, Math.ceil((d.y + B) / META_CELL));
+    for (let gy = y0; gy <= y1; gy++) {
+      const dy = gy * META_CELL - d.y;
+      for (let gx = x0; gx <= x1; gx++) {
+        const dx = gx * META_CELL - d.x;
+        let along = dx * ux + dy * uy;               // > 0 vor dem Tropfen, < 0 dahinter
+        const across2 = dx * dx + dy * dy - along * along;
+        if (along < 0) along /= stretch;
+        const q = (along * along + across2) / R2;
+        if (q >= 1) continue;
+        const f = (1 - q) * (1 - q);
+        field[gx + gy * w] += f;
+        speed[gx + gy * w] += f * v;   // gewichtete Geschwindigkeit für die Farbe
+      }
+    }
+  }
+
+  const data = img.data;
+  data.fill(0);
+  for (let gy = 1; gy < h - 1; gy++) {
+    for (let gx = 1; gx < w - 1; gx++) {
+      const i = gx + gy * w, f = field[i];
+      if (f < META_T) continue;
+      // Normal Mapping: Feld als Höhe lesen, Gefälle kippt die 3D-Normale (nx, ny, nz)
+      const sx = (Math.min(field[i + 1], HEIGHT_CAP) - Math.min(field[i - 1], HEIGHT_CAP)) * BUMP;
+      const sy = (Math.min(field[i + w], HEIGHT_CAP) - Math.min(field[i - w], HEIGHT_CAP)) * BUMP;
+      const nz = 1 / Math.sqrt(sx * sx + sy * sy + 1);
+      const nx = -sx * nz, ny = -sy * nz;
+      const edge = 1 - nz;                          // 0 = flach (Mitte), → 1 = steil (Rand)
+      // Brechung: der Tropfen zeigt den Hintergrund der Gegenseite, kopfüber wie eine Linse
+      const c = cityColor(gx * META_CELL - nx * REFRACT, gy * META_CELL - ny * REFRACT);
+      // Farbe = Kraft: Rand zeigt die Geschwindigkeit (dunkel = klebt, hell-cyan = läuft schnell)
+      const rim = gradient(SPEED_COLORS, speed[i] / f / 3);
+      // Fresnel (Schlick): je flacher der Blick auf die Oberfläche, desto mehr Spiegelung
+      const fresnel = F0 + (1 - F0) * Math.pow(edge, 5);
+      // Glanzlicht (Blinn-Phong)
+      const spec = Math.pow(Math.max(0, nx * HALF[0] + ny * HALF[1] + nz * HALF[2]), SHININESS) * 255;
+      for (let ch = 0; ch < 3; ch++) {
+        let v = c[ch] * (1 - EDGE_DARK * edge) + (255 - c[ch]) * 0.12;
+        v += (rim[ch] - v) * edge * 0.8;
+        v += (REFLECT_COLOR[ch] - v) * fresnel;
+        data[i * 4 + ch] = v + spec;
+      }
+      data[i * 4 + 3] = 255;
+    }
+  }
+  meta.ctx.putImageData(img, 0, 0);
+  drawingContext.drawImage(meta.canvas, 0, 0, w * META_CELL, h * META_CELL); // Hochskalieren glättet die Kanten
+}
+
+// Verschmelzen: Fläche (Masse) und Impuls bleiben erhalten; ein Film-Partikel bleibt an seinem Platz
+function merge(big, small) {
+  const m = big.mass + small.mass;
+  if (!big.film) {
+    big.x = (big.x * big.mass + small.x * small.mass) / m;
+    big.y = (big.y * big.mass + small.y * small.mass) / m;
+    big.vx = (big.vx * big.mass + small.vx * small.mass) / m;
+    big.vy = (big.vy * big.mass + small.vy * small.mass) / m;
+  }
+  big.wordMass += small.wordMass;
+  big.r = Math.sqrt(m);
+  small.alive = false;
+}
+
+function drain(runner, film) {
+  const take = film.mass - FILM_MIN_R * FILM_MIN_R;
+  if (take <= 0) return;
+  film.wordMass *= FILM_MIN_R * FILM_MIN_R / film.mass;
+  film.r = FILM_MIN_R;
+  runner.r = Math.sqrt(runner.mass + take);
+}
+
+// Kraft 3 + Kollision/Absorption mit allen Nachbarn aus den 3x3 Rasterzellen
+function interact(a, grid, cols, rows) {
+  for (let gy = a.cy - 1; gy <= a.cy + 1; gy++) {
+    for (let gx = a.cx - 1; gx <= a.cx + 1; gx++) {
+      if (gx < 0 || gy < 0 || gx >= cols || gy >= rows) continue;
+      for (const b of grid[gx + gy * cols]) {
+        if (b === a || !b.alive || (a.film && b.film)) continue;   // der Film hängt schon zusammen
+        const dx = b.x - a.x, dy = b.y - a.y;
+        const d = Math.sqrt(dx * dx + dy * dy);
+        if (d < a.r + b.r) {
+          // laufender Tropfen streift den Film: nimmt nur das überschüssige Wasser mit, der dünne Film bleibt
+          if (a.moving && b.film) { drain(a, b); continue; }
+          if (b.moving && a.film) { drain(b, a); continue; }
+          if (frameCount - a.born < MERGE_DELAY || frameCount - b.born < MERGE_DELAY) continue;
+          // laufender Tropfen sammelt ein; sonst schluckt der Film; sonst der größere
+          const aWins = a.moving !== b.moving ? a.moving : a.film !== b.film ? a.film : a.r >= b.r;
+          if (aWins) merge(a, b);
+          else { merge(b, a); return; }
+        } else if (!a.film && d < a.r + b.r + COHESION_RANGE) {   // der Film wird vom Film gehalten
+          const f = COHESION * b.r / a.r / d;
+          a.ax += dx * f; a.ay += dy * f;
+        }
+      }
+    }
+  }
+}
+
+// ponytail: Raster mit CELL = 48 findet Paare nur bis r1 + r2 + COHESION_RANGE <= 48; sehr große Tropfen verpassen ferne Nachbarn
+function stepDrops() {
+  const cols = Math.ceil(width / CELL), rows = Math.ceil(height / CELL);
+  const grid = Array.from({ length: cols * rows }, () => []);
+  for (const d of drops) {
+    d.cx = constrain(Math.floor(d.x / CELL), 0, cols - 1);
+    d.cy = constrain(Math.floor(d.y / CELL), 0, rows - 1);
+    d.ax = 0; d.ay = 0;
+    grid[d.cx + d.cy * cols].push(d);
+  }
+  for (const d of drops) if (d.alive) interact(d, grid, cols, rows);
+  flowFilm();
+
+  const count = drops.length;   // neue Spur-Tropfen erst im nächsten Frame bewegen
+  for (let i = 0; i < count; i++) if (drops[i].alive) drops[i].update();
+
+  // Nässe: laufende Tropfen machen das Glas nass, es trocknet langsam
+  for (let i = 0; i < wet.length; i++) wet[i] *= WET_DECAY;
+  fog.erase();
+  fog.noStroke();
+  for (const d of drops) {
+    if (!d.moving || !d.alive) continue;
+    wet[constrain(Math.floor(d.x / WET_CELL), 0, wetCols - 1) + constrain(Math.floor(d.y / WET_CELL), 0, wetRows - 1) * wetCols] = 1;
+    fog.circle(d.x, d.y, d.r * 2.2);   // und wischen den Beschlag weg
+  }
+  fog.noErase();
+
+  drops = drops.filter(d => d.alive);
+}
+
+function rain() {
+  const n = Math.floor(rainRate) + (random() < rainRate % 1 ? 1 : 0);
+  for (let i = 0; i < n && drops.length < MAX_DROPS; i++) {
+    const r = random() < 0.1 ? random(3, 4.5) : random(1, 2.5);
+    drops.push(new Drop(random(FRAME, width - FRAME), random(FRAME, height - FRAME), r));
+  }
+}
+
+function gradient(stops, t) {
+  t = constrain(t, 0, 1) * (stops.length - 1);
+  const i = Math.min(Math.floor(t), stops.length - 2);
+  const f = t - i, a = stops[i], b = stops[i + 1];
+  return [a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f, a[2] + (b[2] - a[2]) * f];
+}
+
+function rgb(c, alpha = 1) {
+  return `rgba(${c[0] | 0},${c[1] | 0},${c[2] | 0},${alpha})`;
+}
+
+function cityColor(x, y) {
+  const i = (constrain(Math.floor(y), 0, height - 1) * width + constrain(Math.floor(x), 0, width - 1)) * 4;
+  return [city.pixels[i], city.pixels[i + 1], city.pixels[i + 2]];
+}
+
+function distToSegment(px, py, ax, ay, bx, by) {
+  const dx = bx - ax, dy = by - ay;
+  const len2 = dx * dx + dy * dy;
+  const t = len2 ? constrain(((px - ax) * dx + (py - ay) * dy) / len2, 0, 1) : 0;
+  return dist(px, py, ax + t * dx, ay + t * dy);
+}
+
+// Nachtstadt hinter der Scheibe, einmal gemalt
+function buildCity() {
+  const sw = Math.ceil(width / CITY_BLUR), sh = Math.ceil(height / CITY_BLUR);
+  const small = createGraphics(sw, sh);
+  small.pixelDensity(1);
+  const grad = small.drawingContext.createLinearGradient(0, 0, 0, sh);
+  grad.addColorStop(0, rgb(SKY[0]));
+  grad.addColorStop(0.55, rgb(SKY[1]));
+  grad.addColorStop(1, rgb(SKY[2]));
+  small.drawingContext.fillStyle = grad;
+  small.drawingContext.fillRect(0, 0, sw, sh);
+
+  // drei Häuserreihen, hinten hoch und hell, vorne niedrig und dunkel
+  small.noStroke();
+  for (let layer = 0; layer < 3; layer++) {
+    for (let x = random(-20, 0); x < sw; ) {
+      const w = random(6, 22), h = sh * random(0.2, 0.6) * (1 - layer * 0.15);
+      small.fill(BUILDINGS[layer]);
+      small.rect(x, sh - h, w, h);
+      for (let wy = sh - h + 2; wy < sh - 1; wy += 2) {
+        for (let wx = x + 1; wx < x + w - 1; wx += 2) {
+          if (random() < 0.25) { small.fill(random(WINDOW_COLORS)); small.rect(wx, wy, 1, 1); }
+        }
+      }
+      x += w + random(1, 4);
+    }
+  }
+
+  city = createGraphics(width, height);
+  city.pixelDensity(1);
+  city.image(small, 0, 0, width, height);   // Hochskalieren macht Fenster zu weichen Lichtflecken
+  small.remove();
+
+  // Bokeh: unscharfe Lichter (Autos, Laternen), additiv übereinander
+  city.noStroke();
+  city.blendMode(ADD);
+  for (let i = 0; i < 120; i++) {
+    const c = random(BOKEH_COLORS);
+    const x = random(width), y = random(height * 0.4, height), r = random(8, 40);
+    city.fill(c[0], c[1], c[2], 25);
+    city.circle(x, y, r * 2);
+    city.fill(c[0], c[1], c[2], 35);
+    city.circle(x, y, r * 1.4);
+  }
+  city.blendMode(BLEND);
+  city.loadPixels();
+}
+
+// Wort mit dem Finger in den Beschlag geschrieben; das Wasser darin bildet einen zusammenhängenden Film
+function buildWord() {
+  drops = [];
+  wordMassTotal = 0;
+  filmCols = Math.ceil(width / STEP);
+  filmRows = Math.ceil(height / STEP);
+  filmGrid = new Array(filmCols * filmRows).fill(null);
+  const size = min(width / (WORD.length * 0.7), height * 0.4);
+  const g = createGraphics(width, height);
+  g.pixelDensity(1);
+  g.background(0);
+  g.fill(255);
+  g.noStroke();
+  g.textAlign(CENTER, CENTER);
+  g.textStyle(BOLD);
+  g.textSize(size);
+  g.text(WORD, width / 2, height / 2);
+  g.loadPixels();
+  for (let row = 0; row < filmRows; row++) {
+    for (let col = 0; col < filmCols; col++) {
+      const x = col * STEP, y = row * STEP;
+      if (g.pixels[(y * width + x) * 4] > 128) {
+        const d = new Drop(x + random(-0.7, 0.7), y + random(-0.7, 0.7), random(R_MIN, R_MAX));
+        d.film = true;
+        d.col = col; d.row = row;
+        d.wordMass = d.mass;
+        wordMassTotal += d.mass;
+        filmGrid[col + row * filmCols] = d;
+        drops.push(d);
+      }
+    }
+  }
+  g.remove();
+
+  fog = createGraphics(width, height);
+  fog.pixelDensity(1);
+  fog.background(FOG_COLOR);
+  fog.erase();
+  fog.textAlign(CENTER, CENTER);
+  fog.textStyle(BOLD);
+  fog.textSize(size);
+  fog.strokeWeight(size * 0.04);
+  fog.text(WORD, width / 2, height / 2);
+  fog.noErase();
+}
+
+function setup() {
+  createCanvas(windowWidth, windowHeight);
+  pixelDensity(1);
+  buildCity();
+  buildGrids();
+  buildWord();
+}
+
+function updateFog() {
+  if (frameCount % FOG_REGROW_EVERY === 0) {
+    fog.noStroke();
+    fog.fill(FOG_COLOR[0], FOG_COLOR[1], FOG_COLOR[2], FOG_REGROW);
+    fog.rect(0, 0, width, height);
+  }
+  // Maus ziehen = wischen: Beschlag und Tropfen weg
+  if (mouseIsPressed) {
+    fog.erase();
+    fog.stroke(0);
+    fog.strokeWeight(WIPE_RADIUS * 2);
+    fog.line(pmouseX, pmouseY, mouseX, mouseY);
+    fog.noErase();
+    for (const d of drops) {
+      if (distToSegment(d.x, d.y, pmouseX, pmouseY, mouseX, mouseY) < WIPE_RADIUS + d.r) d.alive = false;
+    }
+  }
+  // Leertaste = anhauchen: Beschlag kommt zurück, feine Tröpfchen kondensieren
+  if (keyIsDown(32)) {
+    fog.noStroke();
+    fog.fill(FOG_COLOR[0], FOG_COLOR[1], FOG_COLOR[2], 30);
+    fog.circle(mouseX, mouseY, BREATH_RADIUS * 2);
+    for (let i = 0; i < 3 && drops.length < MAX_DROPS; i++) {
+      const a = random(TWO_PI), r = random(BREATH_RADIUS);
+      drops.push(new Drop(mouseX + Math.cos(a) * r, mouseY + Math.sin(a) * r, random(0.6, 1.5)));
+    }
+  }
+}
+
+// Regen hinter der Scheibe, Neigung zeigt den Wind
+function drawRainStreaks() {
+  stroke(200, 210, 230, 40);
+  strokeWeight(1);
+  for (let i = 0; i < 60 * rainRate; i++) {
+    const x = random(width), y = random(height);
+    line(x, y, x + wind * 100, y + 25);
+  }
+}
+
+function draw() {
+  wind = (noise(frameCount * 0.003) - 0.5) * 2 * WIND_FORCE;
+  rain();
+  updateFog();
+  stepDrops();
+
+  image(city, 0, 0);
+  drawRainStreaks();
+  drawingContext.globalAlpha = FOG_OPACITY;
+  image(fog, 0, 0);
+  drawingContext.globalAlpha = 1;
+  for (const d of drops) if (d.r < META_MIN_R) d.draw();
+  drawMetaballs();
+
+  // Fensterrahmen
+  noFill();
+  stroke(22, 18, 16);
+  strokeWeight(FRAME * 2);
+  rect(0, 0, width, height);
+  stroke(60, 50, 45);
+  strokeWeight(1);
+  rect(FRAME, FRAME, width - FRAME * 2, height - FRAME * 2);
+
+  let intact = 0;
+  for (const d of drops) if (!d.moving) intact += d.wordMass;
+  noStroke();
+  fill(255, 200);
+  textSize(12);
+  textAlign(LEFT, TOP);
+  text(`Wort intakt ${(intact / wordMassTotal * 100).toFixed(0)}%   Tropfen ${drops.length}   Wind ${wind.toFixed(2)}   |  Maus ziehen = wischen  |  Leertaste halten = anhauchen  |  + / - = Regen (${rainRate}x)  |  R = neu`, FRAME + 8, FRAME + 8);
+}
+
+function keyPressed() {
+  if (key === '+') rainRate = min(8, rainRate * 2);
+  if (key === '-') rainRate = max(0.25, rainRate / 2);
+  if (key === 'r' || key === 'R') buildWord();
+}
+
+function windowResized() {
+  resizeCanvas(windowWidth, windowHeight);
+  buildCity();
+  buildGrids();
+  buildWord();
+}
+</script>
+</body>
+</html>

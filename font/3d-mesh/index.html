@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <title>Weiche Schrift</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.11.1/p5.js"></script>
+  <style>
+    body { margin: 0; overflow: hidden; background: #111; color: #889; font: 13px monospace; }
+    canvas { display: block; }
+    p { position: absolute; top: 0; width: 100%; margin: 8px 0; text-align: center; pointer-events: none; }
+  </style>
+</head>
+<body>
+<p><b>Leertaste</b> = Schwamm fallen lassen · Maus ziehen = Kamera drehen · Scrollen = Zoom</p>
+<script>
+// Schrift und Schwamm sind weiche Körper (Masse-Feder-Gitter aus Voxeln).
+// Datenorientiert im ECS-Stil: Entitäten sind reine Daten (flache Arrays + Material),
+// Systeme sind Funktionen, die pro Substep über alle Körper laufen.
+
+const WORD = "SCHWAMM";
+const ROWS = 20;           // Raster-Auflösung der Schrift in Zellen (Höhe)
+const CELL = 12;           // Kantenlänge einer Voxel-Zelle
+const DEPTH = 5;           // Voxel-Schichten in z (Extrusionstiefe)
+const SUBSTEPS = 8;        // mehr = stabiler, aber langsamer
+const GRAVITY = 1800;
+const DENSE_RATIO = 0.3;   // maximale Stauchung einer Zelle (Anteil der Zellgröße), verhindert Durchklappen
+// stiffness = Federhärte (klein = weich), memory = Zug zurück zur Ursprungsform,
+// damping = Geschwindigkeitsverlust pro Substep (groß = zäh wie Schaumstoff), mass = Masse je Knoten
+const LETTER_MATERIAL = { stiffness: 0.002, memory: 0.0001, damping: 0.05, gravity: 0, anchored: true, mass: 1 };
+const SPONGE_MATERIAL = { stiffness: 0.004, memory: 0.0015, damping: 0.05, gravity: GRAVITY, anchored: false, mass: 3 };
+const CONTACT_ABSORB = 0.8;  // Anteil des Kontaktstoßes, den die Schrift schluckt (1 = zäh/steif, 0 = federnd/zittrig)
+const SPONGE_CELLS = [13, 5, 8]; // Schwamm-Größe in Zellen (x, y, z)
+const SPONGE_CELL = 20;
+
+let letters;
+let sponge;
+
+function setup() {
+  createCanvas(windowWidth, windowHeight, WEBGL);
+  letters = { ...buildSoftBody(rasterizeWord(), CELL), ...LETTER_MATERIAL };
+  sponge = buildSponge();
+  dropSponge();
+  camera(0, -650, 1000, 0, -100, 0, 0, 1, 0);
+}
+
+function draw() {
+  step(1 / 60);
+
+  background(17);
+  orbitControl();
+  ambientLight(70);
+  directionalLight(255, 250, 240, 0.4, 1, -0.6);
+  directionalLight(90, 100, 130, -0.6, -0.3, -1);
+  noStroke();
+
+  push();
+  translate(0, 1, 0); // knapp unter den Bodenflächen der Schrift, sonst Z-Fighting
+  rotateX(HALF_PI);
+  fill(45);
+  plane(4000, 4000);
+  pop();
+
+  drawSoftBody(letters, () => [235, 232, 225]);
+  // klassischer Küchenschwamm: gelber Schaum, grüne Scheuerseite in der obersten Zellschicht
+  const scrubLine = -(SPONGE_CELLS[1] - 1) * SPONGE_CELL;
+  drawSoftBody(sponge, restY => restY < scrubLine ? [40, 120, 60] : [245, 200, 40]);
+}
+
+function keyPressed() {
+  if (key === ' ') dropSponge();
+}
+
+function windowResized() {
+  resizeCanvas(windowWidth, windowHeight);
+}
+
+// ---------- Aufbau ----------
+
+// Text in Offscreen-Buffer zeichnen, jedes helle Pixel wird eine Zellsäule
+function rasterizeWord() {
+  const cols = ROWS * WORD.length;
+  const g = createGraphics(cols, ROWS);
+  g.pixelDensity(1);
+  g.background(0);
+  g.fill(255);
+  g.noStroke();
+  g.textStyle(BOLD);
+  g.textSize(ROWS * 1.1);
+  g.textAlign(CENTER, CENTER);
+  g.text(WORD, cols / 2, ROWS / 2);
+  g.loadPixels();
+  const solid = new Uint8Array(cols * ROWS);
+  for (let i = 0; i < solid.length; i++) solid[i] = g.pixels[i * 4] > 128;
+  g.remove();
+  return { solid, cols, rows: ROWS, depth: DEPTH };
+}
+
+// Knoten sitzen an den Ecken der Voxel; jede Zelle verbindet ihre Ecken über 12 Kanten + 4 Raumdiagonalen.
+// Sichtbare Außenflächen werden als Quads gemerkt und später mit den verformten Knoten gezeichnet.
+function buildSoftBody({ solid, cols, rows, depth }, cell) {
+  const isSolid = (i, j, k) =>
+    i >= 0 && i < cols && j >= 0 && j < rows && k >= 0 && k < depth && solid[j * cols + i];
+
+  let iMin = cols, iMax = 0, jMax = 0;
+  for (let j = 0; j < rows; j++) {
+    for (let i = 0; i < cols; i++) {
+      if (!solid[j * cols + i]) continue;
+      iMin = Math.min(iMin, i);
+      iMax = Math.max(iMax, i);
+      jMax = Math.max(jMax, j);
+    }
+  }
+  const centerI = (iMin + iMax + 1) / 2;
+
+  const rest = [];
+  const nodeOf = new Map();
+  const node = (i, j, k) => {
+    const key = (k * (rows + 1) + j) * (cols + 1) + i;
+    if (!nodeOf.has(key)) {
+      nodeOf.set(key, rest.length / 3);
+      // Unterkante liegt auf dem Boden (y = 0, y zeigt nach unten)
+      rest.push((i - centerI) * cell, (j - jMax - 1) * cell, (k - depth / 2) * cell);
+    }
+    return nodeOf.get(key);
+  };
+
+  const springKeys = new Set();
+  const orderKeys = new Set();
+  const faces = [];
+  const dirs = [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]];
+
+  for (let k = 0; k < depth; k++) {
+    for (let j = 0; j < rows; j++) {
+      for (let i = 0; i < cols; i++) {
+        if (!isSolid(i, j, k)) continue;
+        const corner = [];
+        for (let c = 0; c < 8; c++) corner.push(node(i + (c & 1), j + ((c >> 1) & 1), k + (c >> 2)));
+
+        for (let a = 0; a < 8; a++) {
+          for (let b = a + 1; b < 8; b++) {
+            const bits = [0, 1, 1, 2, 1, 2, 2, 3][a ^ b];
+            if (bits === 2) continue; // ponytail: Flächendiagonalen weggelassen, Raumdiagonalen halten die Scherung
+            const lo = Math.min(corner[a], corner[b]), hi = Math.max(corner[a], corner[b]);
+            springKeys.add(lo * 1e6 + hi);
+            // Gitterkante entlang einer Achse: Ecken unterscheiden sich in genau einem Bit
+            const axis = [1, 2, 4].indexOf(a ^ b);
+            if (axis >= 0) orderKeys.add((corner[a] * 1e6 + corner[b]) * 4 + axis);
+          }
+        }
+
+        for (const dir of dirs) {
+          if (isSolid(i + dir[0], j + dir[1], k + dir[2])) continue;
+          const axis = dir.findIndex(d => d !== 0);
+          const u = (axis + 1) % 3, v = (axis + 2) % 3;
+          const offset = [0, 0, 0];
+          offset[axis] = dir[axis] > 0 ? 1 : 0;
+          const quad = [[0, 0], [1, 0], [1, 1], [0, 1]].map(([du, dv]) => {
+            offset[u] = du;
+            offset[v] = dv;
+            return corner[offset[0] + 2 * offset[1] + 4 * offset[2]];
+          });
+          // Reihenfolge so drehen, dass die Normale nach außen zeigt
+          if (dot(quadNormal(rest, quad), dir) < 0) quad.reverse();
+          faces.push(...quad);
+        }
+      }
+    }
+  }
+
+  const springs = new Int32Array(springKeys.size * 2);
+  const restLength = new Float32Array(springKeys.size);
+  let s = 0;
+  for (const key of springKeys) {
+    const a = Math.floor(key / 1e6), b = key % 1e6;
+    springs[s * 2] = a;
+    springs[s * 2 + 1] = b;
+    restLength[s] = Math.hypot(rest[b * 3] - rest[a * 3], rest[b * 3 + 1] - rest[a * 3 + 1], rest[b * 3 + 2] - rest[a * 3 + 2]);
+    s++;
+  }
+
+  // je Gitterkante: [Knoten mit kleinerer Koordinate, Knoten mit größerer, Achse]
+  const order = Int32Array.from([...orderKeys].flatMap(key => [Math.floor(key / 4e6), Math.floor(key / 4) % 1e6, key % 4]));
+
+  return {
+    pos: Float32Array.from(rest),
+    prev: Float32Array.from(rest),
+    rest: Float32Array.from(rest),
+    springs,
+    restLength,
+    order,
+    faces: Int32Array.from(faces),
+    cell,
+  };
+}
+
+function buildSponge() {
+  const [cols, rows, depth] = SPONGE_CELLS;
+  const block = { solid: new Uint8Array(cols * rows).fill(1), cols, rows, depth };
+  const body = { ...buildSoftBody(block, SPONGE_CELL), ...SPONGE_MATERIAL };
+  body.underside = surfaceGrid(body, 0, cols + 1, depth + 1);
+  body.topside = surfaceGrid(body, -rows * SPONGE_CELL, cols + 1, depth + 1);
+  return body;
+}
+
+// Knoten-Indizes einer waagrechten Außenfläche eines Quaders als Raster [i + k * cols]
+function surfaceGrid({ rest, cell }, y, cols, rows) {
+  const grid = new Int32Array(cols * rows);
+  const minX = Math.min(...rest.filter((_, i) => i % 3 === 0));
+  const minZ = Math.min(...rest.filter((_, i) => i % 3 === 2));
+  for (let n = 0; n < rest.length; n += 3) {
+    if (rest[n + 1] !== y) continue;
+    grid[Math.round((rest[n] - minX) / cell) + Math.round((rest[n + 2] - minZ) / cell) * cols] = n / 3;
+  }
+  return { grid, cols, rows, minX, minZ };
+}
+
+function dropSponge() {
+  const halfWidth = Math.max(...letters.rest.filter((_, i) => i % 3 === 0));
+  const x = (Math.random() * 2 - 1) * halfWidth * 0.8;
+  const y = -ROWS * CELL - 500;
+  for (let i = 0; i < sponge.pos.length; i += 3) {
+    sponge.pos[i] = sponge.prev[i] = sponge.rest[i] + x;
+    sponge.pos[i + 1] = sponge.prev[i + 1] = sponge.rest[i + 1] + y;
+    sponge.pos[i + 2] = sponge.prev[i + 2] = sponge.rest[i + 2];
+  }
+}
+
+// ---------- Systeme ----------
+
+function step(dt) {
+  const h = dt / SUBSTEPS;
+  for (let s = 0; s < SUBSTEPS; s++) {
+    // ponytail: keine Schwerkraft auf der Schrift, das Formgedächtnis trägt sie
+    for (const body of [letters, sponge]) {
+      integrate(body, h);
+      solveSprings(body);
+      solveMemory(body);
+      solveOrder(body);
+    }
+    collideUnderside(letters, sponge);
+    collideFloor(letters);
+    collideFloor(sponge);
+  }
+}
+
+// Verlet: Geschwindigkeit steckt implizit in pos - prev.
+// Gedämpft wird nur die Bewegung relativ zum Schwerpunkt (innere Reibung), nicht der freie Fall.
+function integrate({ pos, prev, gravity, damping }, dt) {
+  const mean = [0, 0, 0];
+  for (let i = 0; i < pos.length; i++) mean[i % 3] += pos[i] - prev[i];
+  for (let a = 0; a < 3; a++) mean[a] /= pos.length / 3;
+  for (let i = 0; i < pos.length; i++) {
+    const velocity = mean[i % 3] + (pos[i] - prev[i] - mean[i % 3]) * (1 - damping);
+    prev[i] = pos[i];
+    pos[i] += velocity;
+  }
+  for (let i = 1; i < pos.length; i += 3) pos[i] += gravity * dt * dt;
+}
+
+// Abstands-Constraints: jede Feder zieht ihre zwei Knoten Richtung Ruhelänge
+function solveSprings({ pos, springs, restLength, stiffness }) {
+  for (let s = 0; s < restLength.length; s++) {
+    const a = springs[s * 2] * 3, b = springs[s * 2 + 1] * 3;
+    const dx = pos[b] - pos[a], dy = pos[b + 1] - pos[a + 1], dz = pos[b + 2] - pos[a + 2];
+    const length = Math.sqrt(dx * dx + dy * dy + dz * dz);
+    if (length === 0) continue;
+    const correction = (length - restLength[s]) / length * 0.5 * stiffness;
+    pos[a] += dx * correction; pos[a + 1] += dy * correction; pos[a + 2] += dz * correction;
+    pos[b] -= dx * correction; pos[b + 1] -= dy * correction; pos[b + 2] -= dz * correction;
+  }
+}
+
+// Verdichtung: entlang jeder Gitterkante bleibt die Reihenfolge der Knoten erhalten,
+// sonst tauschen gestauchte Lagen die Plätze und bleiben gespiegelt liegen
+// ponytail: Achsen sind Weltachsen, gilt nur solange kein Körper rotiert
+function solveOrder({ pos, order, cell }) {
+  const minGap = cell * DENSE_RATIO;
+  for (let e = 0; e < order.length; e += 3) {
+    const a = order[e] * 3 + order[e + 2], b = order[e + 1] * 3 + order[e + 2];
+    const gap = pos[b] - pos[a];
+    if (gap >= minGap) continue;
+    const correction = (minGap - gap) / 2;
+    pos[a] -= correction;
+    pos[b] += correction;
+  }
+}
+
+// Schwamm-Verhalten: jeder Knoten quillt langsam zurück in seine Ursprungsform.
+// Verankerte Körper (Schrift) an feste Positionen, freie Körper relativ zu ihrem Schwerpunkt
+// (Shape Matching ohne Rotation), damit Fallen und Wegschieben erhalten bleiben.
+function solveMemory({ pos, rest, memory, anchored }) {
+  const shift = [0, 0, 0];
+  if (!anchored) {
+    for (let i = 0; i < pos.length; i++) shift[i % 3] += pos[i] - rest[i];
+    for (let a = 0; a < 3; a++) shift[a] /= pos.length / 3;
+  }
+  for (let i = 0; i < pos.length; i++) pos[i] += (rest[i] + shift[i % 3] - pos[i]) * memory;
+}
+
+// Die Unterseite von b ist ein verformbares Höhenfeld (bilinear zwischen ihren Knoten).
+// Knoten von a im Grundriss von b, die zwischen Ober- und Unterseite liegen, werden nach unten
+// herausgedrückt, die 4 umliegenden Unterseiten-Knoten gewichtet nach oben (PBD, aufgeteilt nach inverser Masse).
+// ponytail: nur Kontakt über die Unterseite, reicht solange b senkrecht fällt und nicht rotiert
+function collideUnderside(a, b) {
+  const { cols, rows, minX, minZ } = b.underside;
+  const shift = [0, 0, 0];
+  for (let i = 0; i < b.pos.length; i++) shift[i % 3] += b.pos[i] - b.rest[i];
+  const nodes = b.pos.length / 3;
+  const originX = minX + shift[0] / nodes, originZ = minZ + shift[2] / nodes;
+  const corners = [0, 0, 0, 0], weights = [0, 0, 0, 0];
+  const heightAt = grid => {
+    let h = 0;
+    for (let c = 0; c < 4; c++) h += b.pos[grid[corners[c]] * 3 + 1] * weights[c];
+    return h;
+  };
+
+  for (let i = 0; i < a.pos.length; i += 3) {
+    const u = (a.pos[i] - originX) / b.cell, v = (a.pos[i + 2] - originZ) / b.cell;
+    // bis zur Kante volle Kraft, danach über eine halbe Zelle ausblenden,
+    // sonst springen Randknoten zwischen drin/draußen hin und her
+    const edge = Math.min(1, 1 + 2 * Math.min(u, cols - 1 - u, v, rows - 1 - v));
+    if (edge <= 0) continue;
+    const uc = Math.min(Math.max(u, 0), cols - 1.0001), vc = Math.min(Math.max(v, 0), rows - 1.0001);
+    const iu = Math.floor(uc), iv = Math.floor(vc), fu = uc - iu, fv = vc - iv;
+    corners[0] = iu + iv * cols; corners[1] = corners[0] + 1; corners[2] = corners[0] + cols; corners[3] = corners[2] + 1;
+    weights[0] = (1 - fu) * (1 - fv); weights[1] = fu * (1 - fv); weights[2] = (1 - fu) * fv; weights[3] = fu * fv;
+
+    const bottom = heightAt(b.underside.grid), top = heightAt(b.topside.grid);
+    const y = a.pos[i + 1];
+    if (y >= bottom || y <= top) continue;
+
+    const weightSq = weights[0] ** 2 + weights[1] ** 2 + weights[2] ** 2 + weights[3] ** 2;
+    const correction = edge * (bottom - y) / (1 / a.mass + weightSq / b.mass);
+    a.pos[i + 1] += correction / a.mass;
+    a.prev[i + 1] += CONTACT_ABSORB * correction / a.mass;
+    for (let c = 0; c < 4; c++) b.pos[b.underside.grid[corners[c]] * 3 + 1] -= correction * weights[c] / b.mass;
+  }
+}
+
+function collideFloor({ pos }) {
+  for (let i = 1; i < pos.length; i += 3) pos[i] = Math.min(pos[i], 0);
+}
+
+// ---------- Darstellung ----------
+
+// colorOf bekommt die Ruhe-Höhe der Fläche, so färbt sich das Material mit dem Körper mit
+function drawSoftBody({ pos, rest, faces }, colorOf) {
+  specularMaterial(40);
+  shininess(10);
+  beginShape(QUADS);
+  for (let f = 0; f < faces.length; f += 4) {
+    const quad = [faces[f], faces[f + 1], faces[f + 2], faces[f + 3]];
+    fill(colorOf((rest[quad[0] * 3 + 1] + rest[quad[2] * 3 + 1]) / 2));
+    const [nx, ny, nz] = quadNormal(pos, quad);
+    normal(nx, ny, nz);
+    for (const n of quad) vertex(pos[n * 3], pos[n * 3 + 1], pos[n * 3 + 2]);
+  }
+  endShape();
+}
+
+// Normale über das Kreuzprodukt der Diagonalen, robust auch für verzerrte Quads
+function quadNormal(pos, [a, b, c, d]) {
+  const ux = pos[c * 3] - pos[a * 3], uy = pos[c * 3 + 1] - pos[a * 3 + 1], uz = pos[c * 3 + 2] - pos[a * 3 + 2];
+  const vx = pos[d * 3] - pos[b * 3], vy = pos[d * 3 + 1] - pos[b * 3 + 1], vz = pos[d * 3 + 2] - pos[b * 3 + 2];
+  return [uy * vz - uz * vy, uz * vx - ux * vz, ux * vy - uy * vx];
+}
+
+function dot(a, b) {
+  return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+}
+</script>
+</body>
+</html>

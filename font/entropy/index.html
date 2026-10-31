@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <title>ENTROPY</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.6.0/p5.js"></script>
+  <style>
+    html, body { margin: 0; overflow: hidden; background: #0a0a14; }
+    canvas { display: block; }
+  </style>
+</head>
+<body>
+<script>
+const WORD = "ENTROPY";
+const STEP = 5;              // Sampling-Abstand; Partikelzahl ~ 1/STEP²
+const SPRING_K = 0.04;       // Kraft 1: Federkonstante
+const DRAG = 0.08;           // Kraft 2: Reibungskoeffizient (F = -c * v)
+const FLOW_SCALE = 0.004;    // Kraft 3: Raumfrequenz des Noise-Felds
+const FLOW_FORCE = 1.6;      // Kraft 3: Stärke bei temperature = 1
+const SHOCK_RADIUS = 220;
+const SHOCK_FORCE = 28;
+
+let particles = [];
+let temperature = 0.15;      // 0 = kalt, 1 = heiß
+
+class Particle {
+  constructor(x, y) {
+    this.homeX = x; this.homeY = y;
+    this.x = x;     this.y = y;
+    this.vx = 0;    this.vy = 0;
+    this.ax = 0;    this.ay = 0;
+  }
+
+  update(time) {
+    // Kraft 1: Hooke'sche Feder zur Heimat-Position
+    this.ax += (this.homeX - this.x) * SPRING_K;
+    this.ay += (this.homeY - this.y) * SPRING_K;
+
+    // Kraft 2: viskose Reibung, proportional zur Geschwindigkeit
+    this.ax -= this.vx * DRAG;
+    this.ay -= this.vy * DRAG;
+
+    // Kraft 3: Noise-Strömung; Winkel aus Perlin Noise, Stärke ~ temperature²
+    const a = noise(this.x * FLOW_SCALE, this.y * FLOW_SCALE, time) * TWO_PI * 2;
+    const f = temperature * temperature * FLOW_FORCE;
+    this.ax += Math.cos(a) * f;
+    this.ay += Math.sin(a) * f;
+
+    // Integration (Euler), Beschleunigung zurücksetzen
+    this.vx += this.ax; this.vy += this.ay;
+    this.x += this.vx;  this.y += this.vy;
+    this.ax = 0; this.ay = 0;
+  }
+
+  // Druckwelle: radialer Impuls als Beschleunigung, fällt linear mit Abstand ab
+  shock(ox, oy, strength) {
+    const dx = this.x - ox, dy = this.y - oy;
+    const d2 = dx * dx + dy * dy;
+    if (d2 < SHOCK_RADIUS * SHOCK_RADIUS && d2 > 1) {
+      const d = Math.sqrt(d2);
+      const s = strength * (1 - d / SHOCK_RADIUS) / d;
+      this.ax += dx * s; this.ay += dy * s;
+    }
+  }
+
+  show() {
+    // Farbe: Hue 200 (Cyan/Blau) -> 20 (Orange), Helligkeit steigt zu Weiß
+    const heat = Math.min(1, temperature * 0.6 + Math.sqrt(this.vx * this.vx + this.vy * this.vy) * 0.08);
+    stroke(200 - heat * 180, 80 - heat * heat * 70, 70 + heat * 30);
+    point(this.x, this.y);
+  }
+}
+
+function buildParticles() {
+  particles = [];
+  const g = createGraphics(width, height);
+  g.pixelDensity(1);
+  g.background(0);
+  g.fill(255);
+  g.noStroke();
+  g.textAlign(CENTER, CENTER);
+  g.textStyle(BOLD);
+  g.textSize(min(width / (WORD.length * 0.7), height * 0.4));
+  g.text(WORD, width / 2, height / 2);
+  g.loadPixels();
+  // Pixel-Sampling: jeder STEP-te helle Pixel wird ein Partikel
+  for (let y = 0; y < height; y += STEP) {
+    for (let x = 0; x < width; x += STEP) {
+      if (g.pixels[(y * width + x) * 4] > 128) particles.push(new Particle(x, y));
+    }
+  }
+  g.remove();
+}
+
+function setup() {
+  createCanvas(windowWidth, windowHeight);
+  pixelDensity(1);
+  colorMode(HSB, 360, 100, 100);
+  strokeWeight(2.5);
+  buildParticles();
+}
+
+function draw() {
+  // Motion Blur durch halbtransparentes Übermalen
+  noStroke();
+  fill(240, 50, 8, 0.25);
+  rect(0, 0, width, height);
+
+  // Swipe: schnelle Mausbewegung ohne Klick = Druckwelle
+  if (!mouseIsPressed && dist(mouseX, mouseY, pmouseX, pmouseY) > 30) {
+    shockwave(mouseX, mouseY, SHOCK_FORCE * 0.4);
+  }
+
+  const time = frameCount * 0.004;
+  drawingContext.shadowBlur = 6;
+  drawingContext.shadowColor = 'rgba(120,180,255,0.5)';
+  for (let i = 0; i < particles.length; i++) {
+    const p = particles[i];
+    p.update(time);
+    p.show();
+  }
+  drawingContext.shadowBlur = 0;
+
+  noStroke();
+  fill(0, 0, 60);
+  textSize(12);
+  textAlign(LEFT, TOP);
+  text(`temperature ${temperature.toFixed(2)}   particles ${particles.length}   |  + / - oder Drag hoch/runter = Temperatur  |  Klick / Swipe = Druck`, 12, 12);
+}
+
+function shockwave(x, y, strength) {
+  for (let i = 0; i < particles.length; i++) particles[i].shock(x, y, strength);
+}
+
+function mousePressed() { shockwave(mouseX, mouseY, SHOCK_FORCE); }
+
+// Drag nach oben = heißer, nach unten = kälter
+function mouseDragged() {
+  temperature = constrain(temperature - (mouseY - pmouseY) * 0.003, 0, 1);
+}
+
+function keyPressed() {
+  if (key === '+') temperature = min(1, temperature + 0.05);
+  if (key === '-') temperature = max(0, temperature - 0.05);
+}
+
+function windowResized() {
+  resizeCanvas(windowWidth, windowHeight);
+  buildParticles();
+}
+</script>
+</body>
+</html>
