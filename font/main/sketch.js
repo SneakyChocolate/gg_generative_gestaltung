@@ -12,6 +12,11 @@ function draw() {
 	mouseRepelSystem();
 	integrateSystem();
 	renderSystem();
+	renderDebug();
+}
+
+function keyPressed() {
+	if (key === "d") toggleDebug();
 }
 
 function windowResized() {
