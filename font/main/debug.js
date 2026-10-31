@@ -16,7 +16,7 @@ function debugLines() {
 function renderDebug() {
 	if (!isDebugVisible) return;
 	noStroke();
-	fill([120, 255, 160]);
+	fill([220, 220, 220]);
 	textAlign(LEFT, TOP);
 	textSize(14);
 	debugLines().forEach((line, index) => {
