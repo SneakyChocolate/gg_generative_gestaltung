@@ -1,35 +1,39 @@
 // Jede Kraft ist ein System: läuft über alle Partikel und addiert auf acceleration.
 
 function springHomeSystem() {
-	for (let e = 0; e < position.length; e++) {
-		acceleration[e].add(p5.Vector.sub(home[e], position[e]).mult(SPRING));
+	for (let particle = 0; particle < particleCount(); particle++) {
+		const towardsHome = p5.Vector.sub(home[particle], position[particle]);
+		acceleration[particle].add(towardsHome.mult(SPRING_STRENGTH));
 	}
 }
 
 function dragSystem() {
-	for (let e = 0; e < position.length; e++) {
-		acceleration[e].add(p5.Vector.mult(velocity[e], -DRAG));
+	for (let particle = 0; particle < particleCount(); particle++) {
+		const againstMovement = p5.Vector.mult(velocity[particle], -DRAG_STRENGTH);
+		acceleration[particle].add(againstMovement);
 	}
 }
 
 function gravitySystem() {
-	for (let e = 0; e < position.length; e++) {
-		acceleration[e].y += GRAVITY;
+	for (let particle = 0; particle < particleCount(); particle++) {
+		acceleration[particle].y += GRAVITY_STRENGTH;
 	}
 }
 
-// Maus schiebt weg, nahe Partikel stärker (linear bis 0 am Rand)
 function mouseRepelSystem() {
 	const mouse = createVector(mouseX, mouseY);
-	for (let e = 0; e < position.length; e++) {
-		const away = p5.Vector.sub(position[e], mouse);
-		const distance = away.mag();
-
-		const outOfReach = distance >= MOUSE_RADIUS;
-		const onCursor = distance === 0;
-		if (outOfReach || onCursor) continue;
-
-		const closeness = 1 - distance / MOUSE_RADIUS;
-		acceleration[e].add(away.setMag(MOUSE_FORCE * closeness));
+	for (let particle = 0; particle < particleCount(); particle++) {
+		const awayFromMouse = p5.Vector.sub(position[particle], mouse);
+		acceleration[particle].add(mouseForce(awayFromMouse));
 	}
+}
+
+function mouseForce(awayFromMouse) {
+	const distance = awayFromMouse.mag();
+	const isOutOfReach = distance >= MOUSE_RADIUS;
+	const isExactlyOnMouse = distance === 0;
+	if (isOutOfReach || isExactlyOnMouse) return createVector(0, 0);
+
+	const closeness = 1 - distance / MOUSE_RADIUS;
+	return awayFromMouse.setMag(MOUSE_STRENGTH * closeness);
 }

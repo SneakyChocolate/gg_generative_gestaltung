@@ -1,7 +1,7 @@
 function setup() {
 	createCanvas(windowWidth, windowHeight);
 	pixelDensity(1);
-	createWord();
+	createWordParticles();
 }
 
 function draw() {
@@ -16,5 +16,5 @@ function draw() {
 
 function windowResized() {
 	resizeCanvas(windowWidth, windowHeight);
-	createWord();
+	createWordParticles();
 }

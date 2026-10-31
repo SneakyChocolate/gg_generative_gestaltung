@@ -1,18 +1,18 @@
-const WORD = "WORT";
-const STEP = 6;
+const WORD = "A!";
+const PARTICLES_PER_LETTER = 30000;
 const PARTICLE_SIZE = 4;
 const PARTICLE_COLOR = 255;
 const BACKGROUND_COLOR = [10, 10, 20];
 
-// Wort-Layout (word.js)
 const LETTER_WIDTH_RATIO = 0.7;
-const MAX_WORD_HEIGHT = 0.5;
+const MAX_WORD_HEIGHT_RATIO = 0.5;
+const INK_COLOR = 255;
+const PAPER_COLOR = 0;
 const INK_THRESHOLD = 128;
-const RGBA = 4;
+const VALUES_PER_PIXEL = 4;
 
-// Kräfte
-const SPRING = 0.02;
-const DRAG = 0.05;
+const SPRING_STRENGTH = 0.02;
+const DRAG_STRENGTH = 0.05;
+const GRAVITY_STRENGTH = 0.03;
 const MOUSE_RADIUS = 100;
-const MOUSE_FORCE = 3;
-const GRAVITY = 0.03;
+const MOUSE_STRENGTH = 3;
