@@ -42,5 +42,15 @@ check("heat: Brennhöhe Ende = Unterkante", near(burnHeight(fakeLetter, CONFIG.B
 check("heat: Docht nie unter Tisch", wickHeight(-0.5) === CONFIG.TABLE_Y);
 check("heat: heißes Wachs röter als kaltes", waxColor(1, new THREE.Color()).b < waxColor(0, new THREE.Color()).b);
 
+for (const backend of ["own"]) {
+  const { createPhysics } = await import(`./physics/${backend}.js`);
+  const physics = createPhysics({ gravity: CONFIG.GRAVITY, tableY: CONFIG.TABLE_Y });
+  const body = physics.addDrop(new THREE.Vector3(0, CONFIG.TABLE_Y + 1, 0), 0.05, new THREE.Vector3());
+  for (let i = 0; i < 180; i++) physics.step(1 / 60);
+  check(`physics ${backend}: Tropfen fällt nicht durch Tisch`, physics.position(body).y >= CONFIG.TABLE_Y + 0.04);
+  check(`physics ${backend}: Tropfen ist gelandet`, physics.position(body).y < CONFIG.TABLE_Y + 0.1);
+  check(`physics ${backend}: Tropfen liegt still`, physics.isResting(body));
+}
+
 document.getElementById("out").textContent = lines.join("\n");
 document.title = failures ? `FAIL ${failures}` : "PASS";
