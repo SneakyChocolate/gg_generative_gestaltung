@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import * as CONFIG from "./config.js";
 import { buildGrid, cellIndex, floorOf, tallestColumnX } from "./grid.js";
+import { loadLetters } from "./model.js";
 import { temperatureAt, burnHeight, wickHeight, waxColor, updateLetter } from "./heat.js";
 
 const lines = [];
@@ -55,6 +56,24 @@ for (const backend of ["own", "cannon"]) {
   check(`physics ${backend}: Tropfen liegt still`, physics.isResting(body));
   check(`physics ${backend}: Brocken liegt auf dem Tisch`, near(new THREE.Box3().setFromObject(chunkMesh).min.y, CONFIG.TABLE_Y, 0.02));
 }
+
+const letters = await loadLetters(new THREE.MeshBasicMaterial());
+lines.push(`info: Vertices pro Buchstabe ${letters.map((letter) => letter.temperatures.length).join(", ")}`);
+check("model: ein Mesh pro Buchstabe", letters.length === CONFIG.WORD.length);
+check("model: Docht liegt über dem Buchstaben", letters.every((letter) => letter.wick.x >= letter.box.min.x && letter.wick.x <= letter.box.max.x));
+check("model: Buchstaben stehen auf dem Tisch", letters.every((letter) => near(letter.box.min.y, CONFIG.TABLE_Y, 1e-3)));
+check("model: genug Vertices zum Verformen", letters.every((letter) => letter.temperatures.length > 200));
+const halfBurn = burnHeight(letters[0], CONFIG.BURN_SECONDS / 2);
+updateLetter(letters[0], halfBurn);
+const deformed = letters[0].mesh.geometry.getAttribute("position").array;
+let highest = -Infinity;
+let lowest = Infinity;
+for (let i = 1; i < deformed.length; i += 3) {
+  highest = Math.max(highest, deformed[i]);
+  lowest = Math.min(lowest, deformed[i]);
+}
+check("heat: halb abgebrannt ist niedriger", highest < letters[0].top - 0.01);
+check("heat: nichts sinkt unter den Tisch", lowest >= CONFIG.TABLE_Y - 1e-6);
 
 document.getElementById("out").textContent = lines.join("\n");
 document.title = failures ? `FAIL ${failures}` : "PASS";
