@@ -28,10 +28,10 @@ export function createDropSystem(scene, physics, letters) {
     update(dt, burnDt) {
       for (const pool of pools) {
         spawnDrop(pool, burnDt);
-        moveDrops(pool, physics, dt);
+        moveDrops(pool, physics, burnDt);
         mergeTouching(pool, physics);
         for (const drop of pool.drops) drop.temperature = Math.max(0, drop.temperature - burnDt / CONFIG.COOL_SECONDS);
-        render(pool, physics);
+        if (needsRender(pool, physics)) render(pool, physics);
       }
     },
   };
@@ -72,16 +72,16 @@ function findMeltingVertex(letter) {
   for (let attempt = 0; attempt < 30; attempt++) {
     const vertex = Math.floor(Math.random() * letter.temperatures.length);
     const temperature = letter.temperatures[vertex];
-    const facesCamera = Math.abs(normals.getZ(vertex)) > 0.7;
+    const facesCamera = normals.getZ(vertex) > 0.7;
     if (facesCamera && temperature > CONFIG.DROP_MIN_TEMPERATURE && temperature < CONFIG.DROP_MAX_TEMPERATURE) return vertex;
   }
   return -1;
 }
 
-function moveDrops(pool, physics, dt) {
+function moveDrops(pool, physics, burnDt) {
   for (const drop of pool.drops) {
     if (drop.sliding) {
-      drop.position.y -= CONFIG.SLIDE_SPEED * dt;
+      drop.position.y -= CONFIG.SLIDE_SPEED * burnDt;
       if (drop.position.y - drop.radius <= drop.floor) {
         drop.sliding = false;
         drop.body = physics.addDrop(drop.position, drop.radius, new THREE.Vector3(0, -CONFIG.SLIDE_SPEED, 0));
@@ -109,6 +109,10 @@ function mergeTouching(pool, physics) {
       j = i;
     }
   }
+}
+
+function needsRender(pool, physics) {
+  return pool.drops.some((drop) => drop.sliding || drop.temperature > 0 || !physics.isResting(drop.body));
 }
 
 function render(pool, physics) {
