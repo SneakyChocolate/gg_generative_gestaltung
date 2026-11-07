@@ -12,8 +12,6 @@ export const TESSELLATE_EDGE = 0.05;
 export const TESSELLATE_ITERATIONS = 10;
 export const CELL_SIZE = 0.1;
 
-// PHYSICS: "own" (eigene Euler-Physik) | "cannon" (cannon-es)
-export const PHYSICS_BACKEND = "own";
 export const GRAVITY = -3;
 // TABLE: Oberkante des Tisches, der Partner-Tisch muss auf dieser Höhe liegen
 export const TABLE_Y = 0;
@@ -28,8 +26,6 @@ export const SAG = 0.05;
 export const BREAK_THICKNESS = 0.05;
 export const WEIGHT_LEVERAGE = 0.3;
 export const HEAT_WEAKENING = 0.8;
-export const MAX_CHUNKS = 40;
-export const MIN_CHUNK_SIZE = 0.04;
 
 export const DROP_INTERVAL = 0.5;
 export const DROP_MIN_R = 0.045;

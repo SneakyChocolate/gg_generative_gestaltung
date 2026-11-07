@@ -6,10 +6,6 @@ import { createBreakage, takeBrokenPieces } from "./breakage.js";
 import { createDropSystem } from "./drops.js";
 import { createFlame } from "./flame.js";
 import { createTable } from "./table.js";
-import { ConvexGeometry } from "three/addons/geometries/ConvexGeometry.js";
-
-// PHYSICS: Backend wird über CONFIG.PHYSICS_BACKEND gewählt, beide Module haben dieselbe Schnittstelle
-const { createPhysics } = await import(`./physics/${CONFIG.PHYSICS_BACKEND}.js`);
 
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
@@ -38,19 +34,17 @@ const waxMaterial = new THREE.MeshPhysicalMaterial({
   side: THREE.DoubleSide,
 });
 const letters = await loadLetters(waxMaterial);
-const physics = createPhysics({ gravity: CONFIG.GRAVITY, tableY: CONFIG.TABLE_Y });
 const candles = letters.map((letter) => {
   scene.add(letter.mesh);
   updateLetter(letter, letter.top);
   return { letter, breakage: createBreakage(letter), flame: createFlame(scene) };
 });
-const drops = createDropSystem(scene, physics, letters);
+const drops = createDropSystem(scene, letters);
 
 const clock = new THREE.Clock();
 const hud = document.getElementById("hud");
 let burnSeconds = 0;
 let timeFactor = 1;
-let chunkCount = 0;
 let fpsFrames = 0;
 let fpsSeconds = 0;
 
@@ -73,7 +67,6 @@ renderer.setAnimationLoop(() => {
   burnSeconds += burnDt;
   for (const candle of candles) updateCandle(candle, wasBurning);
   drops.update(dt, burnDt);
-  physics.step(dt);
   renderer.render(scene, camera);
   updateHud(frameSeconds);
 });
@@ -83,7 +76,7 @@ function updateCandle({ letter, breakage, flame }, wasBurning) {
   if (!wasBurning) return;
   const burn = burnHeight(letter, burnSeconds);
   updateLetter(letter, burn);
-  for (const piece of takeBrokenPieces(letter, breakage, burn)) dropChunk(piece);
+  takeBrokenPieces(letter, breakage, burn);
   if (!letter.burning) {
     flame.extinguish();
     return;
@@ -92,43 +85,13 @@ function updateCandle({ letter, breakage, flame }, wasBurning) {
   flame.update(clock.elapsedTime);
 }
 
-function dropChunk(piece) {
-  if (chunkCount >= CONFIG.MAX_CHUNKS) return;
-  const size = piece.geometry.boundingBox.getSize(new THREE.Vector3());
-  if (Math.min(size.x, size.y) < CONFIG.MIN_CHUNK_SIZE) return;
-  const chunk = new THREE.Mesh(solidGeometry(piece.geometry), waxMaterial);
-  chunk.position.copy(piece.center);
-  scene.add(chunk);
-  physics.addChunk(chunk);
-  chunkCount++;
-}
-
-function solidGeometry(shell) {
-  const positions = shell.getAttribute("position");
-  const colors = shell.getAttribute("color");
-  const points = [];
-  const average = new THREE.Color(0, 0, 0);
-  for (let i = 0; i < positions.count; i++) {
-    points.push(new THREE.Vector3().fromBufferAttribute(positions, i));
-    average.r += colors.getX(i) / positions.count;
-    average.g += colors.getY(i) / positions.count;
-    average.b += colors.getZ(i) / positions.count;
-  }
-  const solid = new ConvexGeometry(points);
-  const solidColors = new Float32Array(solid.getAttribute("position").count * 3);
-  for (let i = 0; i < solidColors.length; i += 3) average.toArray(solidColors, i);
-  solid.setAttribute("color", new THREE.BufferAttribute(solidColors, 3));
-  solid.computeBoundingBox();
-  return solid;
-}
-
 function updateHud(dt) {
   fpsFrames++;
   fpsSeconds += dt;
   if (fpsSeconds < 0.5) return;
   const fps = Math.round(fpsFrames / fpsSeconds);
   const remaining = Math.max(0, CONFIG.BURN_SECONDS - burnSeconds).toFixed(0);
-  hud.textContent = `${fps} FPS · ${timeFactor}× · Physik: ${CONFIG.PHYSICS_BACKEND} · noch ${remaining} s · [F] schneller · [R] neu`;
+  hud.textContent = `${fps} FPS · ${timeFactor}× · noch ${remaining} s · [F] schneller · [R] neu`;
   fpsFrames = 0;
   fpsSeconds = 0;
 }

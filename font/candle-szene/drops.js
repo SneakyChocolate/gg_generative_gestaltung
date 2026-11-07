@@ -2,6 +2,7 @@ import * as THREE from "three";
 import { MarchingCubes } from "three/addons/objects/MarchingCubes.js";
 import * as CONFIG from "./config.js";
 import { waxColor } from "./heat.js";
+import { stepFall } from "./physics.js";
 
 const ballColor = new THREE.Color();
 
@@ -17,21 +18,21 @@ export function mergeDrops(a, b) {
     temperature: (a.temperature * massA + b.temperature * massB) / mass,
     sliding: bigger.sliding,
     floor: bigger.floor,
-    body: null,
+    resting: false,
   };
 }
 
-export function createDropSystem(scene, physics, letters) {
+export function createDropSystem(scene, letters) {
   const material = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.35 });
   const pools = letters.map((letter) => createPool(scene, letter, material));
   return {
     update(dt, burnDt) {
       for (const pool of pools) {
         spawnDrop(pool, burnDt);
-        moveDrops(pool, physics, burnDt);
-        mergeTouching(pool, physics);
+        moveDrops(pool, dt, burnDt);
+        mergeTouching(pool);
         for (const drop of pool.drops) drop.temperature = Math.max(0, drop.temperature - burnDt / CONFIG.COOL_SECONDS);
-        if (needsRender(pool, physics)) render(pool, physics);
+        if (needsRender(pool)) render(pool);
       }
     },
   };
@@ -63,7 +64,7 @@ function spawnDrop(pool, burnDt) {
     temperature: pool.letter.temperatures[vertex],
     sliding: true,
     floor: pool.letter.floors[vertex],
-    body: null,
+    resting: false,
   });
 }
 
@@ -78,22 +79,21 @@ function findMeltingVertex(letter) {
   return -1;
 }
 
-function moveDrops(pool, physics, burnDt) {
+function moveDrops(pool, dt, burnDt) {
   for (const drop of pool.drops) {
     if (drop.sliding) {
       drop.position.y -= CONFIG.SLIDE_SPEED * burnDt;
       if (drop.position.y - drop.radius <= drop.floor) {
         drop.sliding = false;
-        drop.body = physics.addDrop(drop.position, drop.radius, new THREE.Vector3(0, -CONFIG.SLIDE_SPEED, 0));
+        drop.velocity.set(0, -CONFIG.SLIDE_SPEED, 0);
       }
     } else {
-      drop.position.copy(physics.position(drop.body));
-      drop.velocity.copy(physics.velocity(drop.body));
+      stepFall(drop, dt, CONFIG.TABLE_Y);
     }
   }
 }
 
-function mergeTouching(pool, physics) {
+function mergeTouching(pool) {
   const drops = pool.drops;
   for (let i = 0; i < drops.length; i++) {
     for (let j = i + 1; j < drops.length; j++) {
@@ -101,9 +101,6 @@ function mergeTouching(pool, physics) {
       const b = drops[j];
       if (a.position.distanceTo(b.position) >= a.radius + b.radius) continue;
       const merged = mergeDrops(a, b);
-      if (a.body) physics.remove(a.body);
-      if (b.body) physics.remove(b.body);
-      if (!merged.sliding) merged.body = physics.addDrop(merged.position, merged.radius, merged.velocity);
       drops[i] = merged;
       drops.splice(j, 1);
       j = i;
@@ -111,15 +108,15 @@ function mergeTouching(pool, physics) {
   }
 }
 
-function isActive(pool, physics) {
-  return pool.drops.some((drop) => drop.sliding || drop.temperature > 0 || !physics.isResting(drop.body));
+function isActive(pool) {
+  return pool.drops.some((drop) => drop.sliding || drop.temperature > 0 || !drop.resting);
 }
 
-function needsRender(pool, physics) {
-  return isActive(pool, physics) || !pool.settledRendered;
+function needsRender(pool) {
+  return isActive(pool) || !pool.settledRendered;
 }
 
-function render(pool, physics) {
+function render(pool) {
   const { field, halfSize } = pool;
   const boxSize = 2 * halfSize;
   field.reset();
@@ -138,5 +135,5 @@ function render(pool, physics) {
     );
   }
   field.update();
-  pool.settledRendered = !isActive(pool, physics);
+  pool.settledRendered = !isActive(pool);
 }

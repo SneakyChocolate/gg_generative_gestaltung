@@ -5,6 +5,7 @@ import { loadLetters } from "./model.js";
 import { temperatureAt, burnHeight, wickHeight, waxColor, updateLetter } from "./heat.js";
 import { createBreakage, takeBrokenPieces } from "./breakage.js";
 import { mergeDrops } from "./drops.js";
+import { stepFall } from "./physics.js";
 
 const lines = [];
 let failures = 0;
@@ -45,19 +46,14 @@ check("heat: Brennhöhe Ende = Unterkante", near(burnHeight(fakeLetter, CONFIG.B
 check("heat: Docht nie unter Tisch", wickHeight(-0.5) === CONFIG.TABLE_Y);
 check("heat: heißes Wachs röter als kaltes", waxColor(1, new THREE.Color()).b < waxColor(0, new THREE.Color()).b);
 
-for (const backend of ["own", "cannon"]) {
-  const { createPhysics } = await import(`./physics/${backend}.js`);
-  const physics = createPhysics({ gravity: CONFIG.GRAVITY, tableY: CONFIG.TABLE_Y });
-  const body = physics.addDrop(new THREE.Vector3(0, CONFIG.TABLE_Y + 1, 0), 0.05, new THREE.Vector3());
-  const chunkMesh = new THREE.Mesh(new THREE.IcosahedronGeometry(0.1, 0).scale(2, 0.4, 1));
-  chunkMesh.position.set(0.5, CONFIG.TABLE_Y + 1, 0);
-  physics.addChunk(chunkMesh);
-  for (let i = 0; i < 180; i++) physics.step(1 / 60);
-  check(`physics ${backend}: Tropfen fällt nicht durch Tisch`, physics.position(body).y >= CONFIG.TABLE_Y + 0.04);
-  check(`physics ${backend}: Tropfen ist gelandet`, physics.position(body).y < CONFIG.TABLE_Y + 0.1);
-  check(`physics ${backend}: Tropfen liegt still`, physics.isResting(body));
-  check(`physics ${backend}: Brocken liegt auf dem Tisch`, near(new THREE.Box3().setFromObject(chunkMesh, true).min.y, CONFIG.TABLE_Y, 0.02));
-}
+const fallingBody = { position: new THREE.Vector3(0.2, 1, -0.1), velocity: new THREE.Vector3(), radius: 0, resting: false };
+for (let i = 0; i < 180; i++) stepFall(fallingBody, 1 / 60, 0.3);
+check("physics: Körper landet genau auf groundY", near(fallingBody.position.y, 0.3));
+check("physics: gelandeter Körper ruht", fallingBody.resting && fallingBody.velocity.length() === 0);
+check("physics: keine seitliche Bewegung", fallingBody.position.x === 0.2 && fallingBody.position.z === -0.1);
+const roundBody = { position: new THREE.Vector3(0, 1, 0), velocity: new THREE.Vector3(), radius: 0.05, resting: false };
+for (let i = 0; i < 180; i++) stepFall(roundBody, 1 / 60, CONFIG.TABLE_Y);
+check("physics: Kugel liegt mit Radius über dem Boden", near(roundBody.position.y, CONFIG.TABLE_Y + 0.05));
 
 const letters = await loadLetters(new THREE.MeshBasicMaterial());
 lines.push(`info: Vertices pro Buchstabe ${letters.map((letter) => letter.temperatures.length).join(", ")}`);
@@ -100,8 +96,8 @@ check("breakage: I bleibt ganz", piecesPerLetter[CONFIG.WORD.indexOf("I")] === 0
 check("breakage: E verliert Stücke", piecesPerLetter[CONFIG.WORD.indexOf("E")] > 0);
 check("breakage: T verliert Stücke", piecesPerLetter[CONFIG.WORD.indexOf("T")] > 0);
 
-const dropA = { radius: 0.1, position: new THREE.Vector3(0, 0, 0), velocity: new THREE.Vector3(1, 0, 0), temperature: 1, sliding: true, floor: 0, body: null };
-const dropB = { radius: 0.2, position: new THREE.Vector3(1, 0, 0), velocity: new THREE.Vector3(0, 0, 0), temperature: 0, sliding: false, floor: 0.5, body: null };
+const dropA = { radius: 0.1, position: new THREE.Vector3(0, 0, 0), velocity: new THREE.Vector3(1, 0, 0), temperature: 1, sliding: true, floor: 0, resting: false };
+const dropB = { radius: 0.2, position: new THREE.Vector3(1, 0, 0), velocity: new THREE.Vector3(0, 0, 0), temperature: 0, sliding: false, floor: 0.5, resting: false };
 const mergedDrop = mergeDrops(dropA, dropB);
 check("drops: Volumen bleibt beim Mergen", near(mergedDrop.radius ** 3, 0.1 ** 3 + 0.2 ** 3));
 check("drops: Position massegewichtet", near(mergedDrop.position.x, 0.008 / 0.009));

@@ -15,8 +15,7 @@ Tasten: `F` 4× schneller, `R` neu starten.
 | `heat.js` | Brennhöhe, Temperatur pro Vertex (nur Abstand zum eigenen Docht), Verformung, Farbe |
 | `breakage.js` | hängende Säulen, die dünn und heiß werden, brechen als Brocken ab |
 | `drops.js` | Tropfen entstehen auf der Vorderseite, gleiten, fallen, verschmelzen (Metaballs), liegende Tropfen werden als Pfütze gezeichnet |
-| `physics/own.js` | eigene Physik: Schwerkraft, Euler-Schritt, Tischebene, Brocken werden auf dem Tisch ausgerichtet |
-| `physics/cannon.js` | gleiche Schnittstelle mit cannon-es |
+| `physics.js` | eigene Physik: `stepFall` (Schwerkraft, Euler-Schritt, Landen auf einer Bodenhöhe) |
 | `flame.js` | Flamme aus zwei Sprites + flackerndes Punktlicht |
 | `table.js` | Platzhalter-Tisch für den Partner |
 | `main.js` | Szene, Licht, Kamera, Loop, Brocken als konvexe Hülle, HUD |
@@ -30,7 +29,7 @@ Zeit → Brennhöhe pro Buchstabe → `updateLetter` verformt und färbt → `ta
 - **Abbrennen:** jeder Vertex wird auf `Brennhöhe + CRATER · r²` gedeckelt (r = waagrechter Abstand zum Docht). Ergebnis: Mulde um den Docht, Ränder bleiben stehen.
 - **Hitze:** `T = 1 − Abstand / HEAT_RADIUS`, nur zum eigenen Docht. Heißes Wachs sackt um `SAG · T²` ab und wird orange.
 - **Bruch:** Säulen, die nicht auf dem Tisch stehen (hängend, z. B. Querbalken von E und T), brechen, wenn `Restdicke · (1 − HEAT_WEAKENING · T) < BREAK_THICKNESS + WEIGHT_LEVERAGE · Gewicht`. Gewicht = Höhe der hängenden Säule: je höher sie ist, desto früher bricht sie.
-- **Brocken:** werden als konvexe Hülle (`ConvexGeometry`) mit gemittelter Wachsfarbe erzeugt, also als geschlossener Körper statt offener Schale. Winzige Splitter unter `MIN_CHUNK_SIZE` werden nur aus dem Buchstaben entfernt, nicht an die Physik gegeben. Maximal `MAX_CHUNKS` Brocken. Gelandete Brocken werden so verschoben, dass ihr tiefster Punkt auf `TABLE_Y` liegt.
+- **Brocken:** werden aus dem Buchstaben geschnitten, in diesem Zwischenstand aber verworfen (v2 lässt sie im Mesh fallen).
 - **Tropfen:** spawnen nur auf der Vorderseite (zur Kamera) an heißen Stellen und gleiten im Zeitraffer mit. Berühren sich zwei Tropfen, entsteht einer mit gleichem Volumen (`r = ∛(r1³ + r2³)`) am Massenschwerpunkt. Metaballs verschmelzen optisch schon vorher.
 - **Tisch:** Physik kennt nur `TABLE_Y`. Liegende Tropfen werden, sobald sie den Tisch berühren, als flache, eingesunkene Kugeln gezeichnet → Pfütze. Jeder Buchstabe hat sein eigenes Metaball-Feld, Pfützen benachbarter Buchstaben überlappen sich deshalb, statt zu verschmelzen. Metaball-Felder werden nur neu berechnet, wenn sich etwas bewegt oder abkühlt.
 - **Licht:** neben den Flammen-Punktlichtern gibt es ein schwaches warmes Fülllicht aus Kamerarichtung (`FILL_*` in `config.js`). Es hält die Vorderseiten lesbar und die Szene nach dem Erlöschen nicht schwarz.
@@ -38,7 +37,6 @@ Zeit → Brennhöhe pro Buchstabe → `updateLetter` verformt und färbt → `ta
 ## Umschalten
 
 - Modell: `MODEL_SOURCE` in `config.js` (`"text"`, `"gltf"`, `"fallback"`). Bei Ladefehler automatisch Fallback.
-- Physik: `PHYSICS_BACKEND` (`"own"`, `"cannon"`).
 - Tisch: `createTable` in `table.js` ersetzen, Oberkante auf `TABLE_Y`.
 
 ## Performance
