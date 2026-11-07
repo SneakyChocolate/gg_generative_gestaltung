@@ -3,7 +3,7 @@ import * as THREE from "three";
 const settleBox = new THREE.Box3();
 
 function settleOnTable(body, tableY) {
-  settleBox.setFromObject(body.mesh);
+  settleBox.setFromObject(body.mesh, true);
   body.position.y += tableY - settleBox.min.y;
   body.mesh.position.copy(body.position);
 }

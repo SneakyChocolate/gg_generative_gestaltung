@@ -29,10 +29,10 @@ Zeit → Brennhöhe pro Buchstabe → `updateLetter` verformt und färbt → `ta
 
 - **Abbrennen:** jeder Vertex wird auf `Brennhöhe + CRATER · r²` gedeckelt (r = waagrechter Abstand zum Docht). Ergebnis: Mulde um den Docht, Ränder bleiben stehen.
 - **Hitze:** `T = 1 − Abstand / HEAT_RADIUS`, nur zum eigenen Docht. Heißes Wachs sackt um `SAG · T²` ab und wird orange.
-- **Bruch:** Säulen, die nicht auf dem Tisch stehen (hängend, z. B. Querbalken von E und T), brechen, wenn `Restdicke · (1 − HEAT_WEAKENING · T) < BREAK_THICKNESS`.
+- **Bruch:** Säulen, die nicht auf dem Tisch stehen (hängend, z. B. Querbalken von E und T), brechen, wenn `Restdicke · (1 − HEAT_WEAKENING · T) < BREAK_THICKNESS + WEIGHT_LEVERAGE · Gewicht`. Gewicht = Höhe der hängenden Säule: je höher sie ist, desto früher bricht sie.
 - **Brocken:** werden als konvexe Hülle (`ConvexGeometry`) mit gemittelter Wachsfarbe erzeugt, also als geschlossener Körper statt offener Schale. Winzige Splitter unter `MIN_CHUNK_SIZE` werden nur aus dem Buchstaben entfernt, nicht an die Physik gegeben. Maximal `MAX_CHUNKS` Brocken. Gelandete Brocken werden so verschoben, dass ihr tiefster Punkt auf `TABLE_Y` liegt.
 - **Tropfen:** spawnen nur auf der Vorderseite (zur Kamera) an heißen Stellen und gleiten im Zeitraffer mit. Berühren sich zwei Tropfen, entsteht einer mit gleichem Volumen (`r = ∛(r1³ + r2³)`) am Massenschwerpunkt. Metaballs verschmelzen optisch schon vorher.
-- **Tisch:** Physik kennt nur `TABLE_Y`. Liegende Tropfen werden, sobald sie den Tisch berühren, als flache, eingesunkene Kugeln gezeichnet → Pfütze. Metaball-Felder werden nur neu berechnet, wenn sich etwas bewegt oder abkühlt.
+- **Tisch:** Physik kennt nur `TABLE_Y`. Liegende Tropfen werden, sobald sie den Tisch berühren, als flache, eingesunkene Kugeln gezeichnet → Pfütze. Jeder Buchstabe hat sein eigenes Metaball-Feld, Pfützen benachbarter Buchstaben überlappen sich deshalb, statt zu verschmelzen. Metaball-Felder werden nur neu berechnet, wenn sich etwas bewegt oder abkühlt.
 - **Licht:** neben den Flammen-Punktlichtern gibt es ein schwaches warmes Fülllicht aus Kamerarichtung (`FILL_*` in `config.js`). Es hält die Vorderseiten lesbar und die Szene nach dem Erlöschen nicht schwarz.
 
 ## Umschalten

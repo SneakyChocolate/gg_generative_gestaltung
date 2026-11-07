@@ -49,14 +49,14 @@ for (const backend of ["own", "cannon"]) {
   const { createPhysics } = await import(`./physics/${backend}.js`);
   const physics = createPhysics({ gravity: CONFIG.GRAVITY, tableY: CONFIG.TABLE_Y });
   const body = physics.addDrop(new THREE.Vector3(0, CONFIG.TABLE_Y + 1, 0), 0.05, new THREE.Vector3());
-  const chunkMesh = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.05, 0.1));
+  const chunkMesh = new THREE.Mesh(new THREE.IcosahedronGeometry(0.1, 0).scale(2, 0.4, 1));
   chunkMesh.position.set(0.5, CONFIG.TABLE_Y + 1, 0);
   physics.addChunk(chunkMesh);
   for (let i = 0; i < 180; i++) physics.step(1 / 60);
   check(`physics ${backend}: Tropfen fällt nicht durch Tisch`, physics.position(body).y >= CONFIG.TABLE_Y + 0.04);
   check(`physics ${backend}: Tropfen ist gelandet`, physics.position(body).y < CONFIG.TABLE_Y + 0.1);
   check(`physics ${backend}: Tropfen liegt still`, physics.isResting(body));
-  check(`physics ${backend}: Brocken liegt auf dem Tisch`, near(new THREE.Box3().setFromObject(chunkMesh).min.y, CONFIG.TABLE_Y, 0.02));
+  check(`physics ${backend}: Brocken liegt auf dem Tisch`, near(new THREE.Box3().setFromObject(chunkMesh, true).min.y, CONFIG.TABLE_Y, 0.02));
 }
 
 const letters = await loadLetters(new THREE.MeshBasicMaterial());
@@ -76,12 +76,6 @@ for (let i = 1; i < deformed.length; i += 3) {
 }
 check("heat: halb abgebrannt ist niedriger", highest < letters[0].top - 0.01);
 check("heat: nichts sinkt unter den Tisch", lowest >= CONFIG.TABLE_Y - 1e-6);
-const letterI = letters[CONFIG.WORD.indexOf("I")];
-updateLetter(letterI, burnHeight(letterI, CONFIG.BURN_SECONDS));
-const burnedI = letterI.mesh.geometry.getAttribute("position").array;
-let highestI = -Infinity;
-for (let i = 1; i < burnedI.length; i += 3) highestI = Math.max(highestI, burnedI[i]);
-check("heat: I ist am Ende ganz abgebrannt", highestI < CONFIG.TABLE_Y + 0.01);
 
 const piecesPerLetter = letters.map((letter) => {
   const breakage = createBreakage(letter);
@@ -91,6 +85,14 @@ const piecesPerLetter = letters.map((letter) => {
     updateLetter(letter, burn);
     pieces += takeBrokenPieces(letter, breakage, burn).length;
   }
+  const index = letter.mesh.geometry.getIndex().array;
+  const positions = letter.mesh.geometry.getAttribute("position").array;
+  let highestStanding = -Infinity;
+  for (let corner = 0; corner < index.length; corner += 3) {
+    if (index[corner] === index[corner + 1]) continue;
+    for (let k = 0; k < 3; k++) highestStanding = Math.max(highestStanding, positions[index[corner + k] * 3 + 1]);
+  }
+  check(`heat: ${CONFIG.WORD[letters.indexOf(letter)]} ist am Ende ganz abgebrannt`, highestStanding < CONFIG.TABLE_Y + 0.01);
   return pieces;
 });
 lines.push(`info: Brocken pro Buchstabe ${piecesPerLetter.join(", ")}`);

@@ -26,6 +26,7 @@ export const CRATER = 2.5;
 export const SAG = 0.05;
 
 export const BREAK_THICKNESS = 0.05;
+export const WEIGHT_LEVERAGE = 0.3;
 export const HEAT_WEAKENING = 0.8;
 export const MAX_CHUNKS = 40;
 export const MIN_CHUNK_SIZE = 0.04;

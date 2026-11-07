@@ -90,9 +90,14 @@ function createLetter(geometry, material) {
   geometry.getAttribute("position").setUsage(THREE.DynamicDrawUsage);
   geometry.setAttribute("color", new THREE.BufferAttribute(new Float32Array(rest.length), 3));
   const grid = buildGrid(rest);
-  const floors = new Float32Array(vertexCount);
-  for (let vertex = 0; vertex < vertexCount; vertex++) {
-    floors[vertex] = floorOf(grid, cellIndex(grid, rest[vertex * 3], rest[vertex * 3 + 1]));
+  const floors = new Float32Array(vertexCount).fill(Infinity);
+  const index = geometry.getIndex().array;
+  for (let corner = 0; corner < index.length; corner += 3) {
+    const triangle = [index[corner], index[corner + 1], index[corner + 2]];
+    const x = triangle.reduce((sum, vertex) => sum + rest[vertex * 3], 0) / 3;
+    const y = triangle.reduce((sum, vertex) => sum + rest[vertex * 3 + 1], 0) / 3;
+    const floor = floorOf(grid, cellIndex(grid, x, y));
+    for (const vertex of triangle) floors[vertex] = Math.min(floors[vertex], floor);
   }
   const box = boundingBox(geometry).clone();
   const wick = new THREE.Vector3(tallestColumnX(grid), box.max.y, (box.min.z + box.max.z) / 2);

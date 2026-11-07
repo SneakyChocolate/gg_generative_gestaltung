@@ -66,7 +66,8 @@ addEventListener("resize", () => {
 });
 
 renderer.setAnimationLoop(() => {
-  const dt = Math.min(clock.getDelta(), CONFIG.MAX_FRAME_SECONDS);
+  const frameSeconds = clock.getDelta();
+  const dt = Math.min(frameSeconds, CONFIG.MAX_FRAME_SECONDS);
   const burnDt = dt * timeFactor;
   const wasBurning = burnSeconds < CONFIG.BURN_SECONDS;
   burnSeconds += burnDt;
@@ -74,7 +75,7 @@ renderer.setAnimationLoop(() => {
   drops.update(dt, burnDt);
   physics.step(dt);
   renderer.render(scene, camera);
-  updateHud(dt);
+  updateHud(frameSeconds);
 });
 
 function updateCandle({ letter, breakage, flame }, wasBurning) {

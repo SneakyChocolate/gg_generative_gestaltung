@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { CRATER, HEAT_WEAKENING, BREAK_THICKNESS, TABLE_Y } from "./config.js";
+import { CRATER, HEAT_WEAKENING, BREAK_THICKNESS, WEIGHT_LEVERAGE, TABLE_Y } from "./config.js";
 import { cellIndex, cellCenter, floorOf } from "./grid.js";
 import { temperatureAt, wickHeight } from "./heat.js";
 
@@ -15,20 +15,22 @@ export function createBreakage(letter) {
     const y = (rest[a + 1] + rest[b + 1] + rest[c + 1]) / 3;
     const runStart = grid.runStart[cellIndex(grid, x, y)];
     if (floorOf(grid, runStart) <= TABLE_Y + 1e-4) continue;
-    if (!hangingRuns.has(runStart)) hangingRuns.set(runStart, []);
-    hangingRuns.get(runStart).push(triangle);
+    if (!hangingRuns.has(runStart)) hangingRuns.set(runStart, { triangles: [], weight: 0 });
+    const run = hangingRuns.get(runStart);
+    run.triangles.push(triangle);
+    run.weight = Math.max(run.weight, rest[a + 1] - floorOf(grid, runStart), rest[b + 1] - floorOf(grid, runStart), rest[c + 1] - floorOf(grid, runStart));
   }
   return { hangingRuns };
 }
 
 export function takeBrokenPieces(letter, breakage, burn) {
   const pieces = [];
-  for (const [runStart, triangles] of breakage.hangingRuns) {
+  for (const [runStart, { triangles, weight }] of breakage.hangingRuns) {
     const floor = floorOf(letter.grid, runStart);
     const dx = cellCenter(letter.grid, runStart).x - letter.wick.x;
     const remaining = burn + CRATER * dx * dx - floor;
     const temperature = temperatureAt(Math.hypot(dx, floor - wickHeight(burn)));
-    if (remaining * (1 - HEAT_WEAKENING * temperature) < BREAK_THICKNESS) {
+    if (remaining * (1 - HEAT_WEAKENING * temperature) < BREAK_THICKNESS + WEIGHT_LEVERAGE * weight) {
       pieces.push(cutOut(letter, triangles));
       breakage.hangingRuns.delete(runStart);
     }
