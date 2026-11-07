@@ -71,7 +71,7 @@ function spawnDrop(pool, burnDt) {
 function findMeltingVertex(letter) {
   const normals = letter.mesh.geometry.getAttribute("normal");
   for (let attempt = 0; attempt < 30; attempt++) {
-    const vertex = Math.floor(Math.random() * letter.temperatures.length);
+    const vertex = Math.floor(Math.random() * letter.vertexCount);
     const temperature = letter.temperatures[vertex];
     const facesCamera = normals.getZ(vertex) > 0.7;
     if (facesCamera && temperature > CONFIG.DROP_MIN_TEMPERATURE && temperature < CONFIG.DROP_MAX_TEMPERATURE) return vertex;

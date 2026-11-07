@@ -56,29 +56,72 @@ for (let i = 0; i < 180; i++) stepFall(roundBody, 1 / 60, CONFIG.TABLE_Y);
 check("physics: Kugel liegt mit Radius über dem Boden", near(roundBody.position.y, CONFIG.TABLE_Y + 0.05));
 
 const letters = await loadLetters(new THREE.MeshBasicMaterial());
-lines.push(`info: Vertices pro Buchstabe ${letters.map((letter) => letter.temperatures.length).join(", ")}`);
+lines.push(`info: Vertices pro Buchstabe ${letters.map((letter) => letter.vertexCount).join(", ")}`);
 check("model: ein Mesh pro Buchstabe", letters.length === CONFIG.WORD.length);
 check("model: Docht liegt über dem Buchstaben", letters.every((letter) => letter.wick.x >= letter.box.min.x && letter.wick.x <= letter.box.max.x));
 check("model: Buchstaben stehen auf dem Tisch", letters.every((letter) => near(letter.box.min.y, CONFIG.TABLE_Y, 1e-3)));
-check("model: genug Vertices zum Verformen", letters.every((letter) => letter.temperatures.length > 200));
+check("model: genug Vertices zum Verformen", letters.every((letter) => letter.vertexCount > 200));
 const halfBurn = burnHeight(letters[0], CONFIG.BURN_SECONDS / 2);
-updateLetter(letters[0], halfBurn);
+updateLetter(letters[0], halfBurn, 0);
 const deformed = letters[0].mesh.geometry.getAttribute("position").array;
 let highest = -Infinity;
 let lowest = Infinity;
-for (let i = 1; i < deformed.length; i += 3) {
+for (let i = 1; i < letters[0].vertexCount * 3; i += 3) {
   highest = Math.max(highest, deformed[i]);
   lowest = Math.min(lowest, deformed[i]);
 }
 check("heat: halb abgebrannt ist niedriger", highest < letters[0].top - 0.01);
 check("heat: nichts sinkt unter den Tisch", lowest >= CONFIG.TABLE_Y - 1e-6);
 
+const flameLetter = letters[0];
+const flameBurn = flameLetter.top;
+const flameCentre = new THREE.Vector3(flameLetter.wick.x, wickHeight(flameBurn) + CONFIG.FLAME_HEAT_OFFSET, flameLetter.wick.z);
+const fallenVertex = 0;
+const farVertex = 1;
+flameLetter.base.set([flameCentre.x, flameCentre.y - 0.05, flameCentre.z], fallenVertex * 3);
+flameLetter.base.set([flameCentre.x + CONFIG.HEAT_RADIUS + 0.01, flameCentre.y, flameCentre.z], farVertex * 3);
+updateLetter(flameLetter, flameBurn, 0);
+check("heat: abgefallener Vertex nahe Flamme ist heiß", flameLetter.temperatures[fallenVertex] > 0.7);
+check("heat: Vertex mit base außerhalb HEAT_RADIUS ist kalt", flameLetter.temperatures[farVertex] === 0);
+flameLetter.base.set(flameLetter.rest.subarray(0, 6));
+
+const bulgeLetter = letters[1];
+updateLetter(bulgeLetter, bulgeLetter.top, 0);
+let bulgeVertex = -1;
+for (let vertex = 0; vertex < bulgeLetter.vertexCount; vertex++) {
+  const cold = bulgeLetter.temperatures[vertex] === 0;
+  if (cold && bulgeLetter.restNormals[vertex * 3 + 2] > 0.9) bulgeVertex = vertex;
+}
+bulgeLetter.deposit[bulgeVertex] = 0.02;
+updateLetter(bulgeLetter, bulgeLetter.top, 0);
+const bulgeZ = bulgeLetter.mesh.geometry.getAttribute("position").array[bulgeVertex * 3 + 2];
+check("heat: deposit wölbt nach außen", bulgeVertex >= 0 && near(bulgeZ, bulgeLetter.base[bulgeVertex * 3 + 2] + 0.02 * bulgeLetter.restNormals[bulgeVertex * 3 + 2], 1e-6) && bulgeZ - bulgeLetter.base[bulgeVertex * 3 + 2] > 0.018);
+
+const meltLetter = letters[2];
+updateLetter(meltLetter, meltLetter.top, 0);
+let meltVertex = -1;
+for (let vertex = 0; vertex < meltLetter.vertexCount; vertex++) {
+  if (meltLetter.temperatures[vertex] > CONFIG.DEPOSIT_MELT_T) meltVertex = vertex;
+}
+meltLetter.deposit[meltVertex] = 0.02;
+updateLetter(meltLetter, meltLetter.top, 1);
+check("heat: heißes Wachs schmilzt deposit", meltVertex >= 0 && meltLetter.deposit[meltVertex] < 0.02);
+
+check("model: Reserveplatz", letters.every((letter) => {
+  const index = letter.mesh.geometry.getIndex().array;
+  let maxIndex = 0;
+  for (const vertex of index) maxIndex = Math.max(maxIndex, vertex);
+  return letter.capacity >= 1.5 * letter.vertexCount
+    && letter.mesh.geometry.getAttribute("position").count === letter.capacity
+    && maxIndex < letter.vertexCount;
+}));
+
 const piecesPerLetter = letters.map((letter) => {
   const breakage = createBreakage(letter);
   let pieces = 0;
   for (let second = 0; second <= CONFIG.BURN_SECONDS; second += 1) {
     const burn = burnHeight(letter, second);
-    updateLetter(letter, burn);
+    updateLetter(letter, burn, 1);
     pieces += takeBrokenPieces(letter, breakage, burn).length;
   }
   const index = letter.mesh.geometry.getIndex().array;

@@ -36,7 +36,7 @@ const waxMaterial = new THREE.MeshPhysicalMaterial({
 const letters = await loadLetters(waxMaterial);
 const candles = letters.map((letter) => {
   scene.add(letter.mesh);
-  updateLetter(letter, letter.top);
+  updateLetter(letter, letter.top, 0);
   return { letter, breakage: createBreakage(letter), flame: createFlame(scene) };
 });
 const drops = createDropSystem(scene, letters);
@@ -65,17 +65,17 @@ renderer.setAnimationLoop(() => {
   const burnDt = dt * timeFactor;
   const wasBurning = burnSeconds < CONFIG.BURN_SECONDS;
   burnSeconds += burnDt;
-  for (const candle of candles) updateCandle(candle, wasBurning);
+  for (const candle of candles) updateCandle(candle, wasBurning, burnDt);
   drops.update(dt, burnDt);
   renderer.render(scene, camera);
   updateHud(frameSeconds);
 });
 
-function updateCandle({ letter, breakage, flame }, wasBurning) {
+function updateCandle({ letter, breakage, flame }, wasBurning, burnDt) {
   letter.burning = burnSeconds < CONFIG.BURN_SECONDS;
   if (!wasBurning) return;
   const burn = burnHeight(letter, burnSeconds);
-  updateLetter(letter, burn);
+  updateLetter(letter, burn, burnDt);
   takeBrokenPieces(letter, breakage, burn);
   if (!letter.burning) {
     flame.extinguish();

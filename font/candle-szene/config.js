@@ -22,6 +22,10 @@ export const MAX_FRAME_SECONDS = 0.05;
 export const HEAT_RADIUS = 0.45;
 export const CRATER = 2.5;
 export const SAG = 0.05;
+export const FLAME_HEAT_OFFSET = 0.12;
+export const DEPOSIT_MELT_T = 0.5;
+export const DEPOSIT_MELT_RATE = 1.5;
+export const SPARE_VERTEX_FRACTION = 0.5;
 
 export const BREAK_THICKNESS = 0.05;
 export const WEIGHT_LEVERAGE = 0.3;

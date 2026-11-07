@@ -85,12 +85,21 @@ function densify(geometry) {
 }
 
 function createLetter(geometry, material) {
-  const rest = geometry.getAttribute("position").array.slice();
-  const vertexCount = rest.length / 3;
-  geometry.getAttribute("position").setUsage(THREE.DynamicDrawUsage);
-  geometry.setAttribute("color", new THREE.BufferAttribute(new Float32Array(rest.length), 3));
-  const grid = buildGrid(rest);
-  const floors = new Float32Array(vertexCount).fill(Infinity);
+  const activeRest = geometry.getAttribute("position").array;
+  const vertexCount = activeRest.length / 3;
+  const capacity = Math.ceil(vertexCount * (1 + CONFIG.SPARE_VERTEX_FRACTION));
+  const box = boundingBox(geometry).clone();
+  const rest = new Float32Array(capacity * 3);
+  rest.set(activeRest);
+  const restNormals = new Float32Array(capacity * 3);
+  restNormals.set(geometry.getAttribute("normal").array);
+  const positionAttribute = new THREE.BufferAttribute(rest.slice(), 3);
+  positionAttribute.setUsage(THREE.DynamicDrawUsage);
+  geometry.setAttribute("position", positionAttribute);
+  geometry.deleteAttribute("normal");
+  geometry.setAttribute("color", new THREE.BufferAttribute(new Float32Array(capacity * 3), 3));
+  const grid = buildGrid(activeRest);
+  const floors = new Float32Array(capacity).fill(Infinity);
   const index = geometry.getIndex().array;
   for (let corner = 0; corner < index.length; corner += 3) {
     const triangle = [index[corner], index[corner + 1], index[corner + 2]];
@@ -99,17 +108,21 @@ function createLetter(geometry, material) {
     const floor = floorOf(grid, cellIndex(grid, x, y));
     for (const vertex of triangle) floors[vertex] = Math.min(floors[vertex], floor);
   }
-  const box = boundingBox(geometry).clone();
   const wick = new THREE.Vector3(tallestColumnX(grid), box.max.y, (box.min.z + box.max.z) / 2);
   const reach = Math.hypot(Math.max(box.max.x - wick.x, wick.x - box.min.x), box.max.z - wick.z);
   return {
     mesh: new THREE.Mesh(geometry, material),
+    vertexCount,
+    capacity,
     rest,
+    base: rest.slice(),
+    restNormals,
+    deposit: new Float32Array(capacity),
     floors,
     grid,
     wick,
     box,
-    temperatures: new Float32Array(vertexCount),
+    temperatures: new Float32Array(capacity),
     top: box.max.y,
     bottom: CONFIG.TABLE_Y - CONFIG.CRATER * reach * reach,
     burning: true,
