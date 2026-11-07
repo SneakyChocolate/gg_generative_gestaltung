@@ -1,5 +1,13 @@
 import * as THREE from "three";
 
+const settleBox = new THREE.Box3();
+
+function settleOnTable(body, tableY) {
+  settleBox.setFromObject(body.mesh);
+  body.position.y += tableY - settleBox.min.y;
+  body.mesh.position.copy(body.position);
+}
+
 export function createPhysics({ gravity, tableY }) {
   const bodies = new Set();
 
@@ -33,6 +41,7 @@ export function createPhysics({ gravity, tableY }) {
           body.mesh.rotation.x += body.spin.x * dt;
           body.mesh.rotation.y += body.spin.y * dt;
           body.mesh.rotation.z += body.spin.z * dt;
+          if (body.resting) settleOnTable(body, tableY);
         }
       }
     },

@@ -46,10 +46,14 @@ for (const backend of ["own"]) {
   const { createPhysics } = await import(`./physics/${backend}.js`);
   const physics = createPhysics({ gravity: CONFIG.GRAVITY, tableY: CONFIG.TABLE_Y });
   const body = physics.addDrop(new THREE.Vector3(0, CONFIG.TABLE_Y + 1, 0), 0.05, new THREE.Vector3());
+  const chunkMesh = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.05, 0.1));
+  chunkMesh.position.set(0.5, CONFIG.TABLE_Y + 1, 0);
+  physics.addChunk(chunkMesh);
   for (let i = 0; i < 180; i++) physics.step(1 / 60);
   check(`physics ${backend}: Tropfen fällt nicht durch Tisch`, physics.position(body).y >= CONFIG.TABLE_Y + 0.04);
   check(`physics ${backend}: Tropfen ist gelandet`, physics.position(body).y < CONFIG.TABLE_Y + 0.1);
   check(`physics ${backend}: Tropfen liegt still`, physics.isResting(body));
+  check(`physics ${backend}: Brocken liegt auf dem Tisch`, near(new THREE.Box3().setFromObject(chunkMesh).min.y, CONFIG.TABLE_Y, 0.02));
 }
 
 document.getElementById("out").textContent = lines.join("\n");
