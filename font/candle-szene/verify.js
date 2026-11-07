@@ -6,6 +6,7 @@ import { temperatureAt, burnHeight, wickHeight, waxColor, updateLetter } from ".
 import { createBreakage, takeBrokenPieces } from "./breakage.js";
 import { mergeDrops } from "./drops.js";
 import { stepFall } from "./physics.js";
+import { createSurface, updateSurface, heightAt } from "./surface.js";
 
 const lines = [];
 let failures = 0;
@@ -146,6 +147,20 @@ check("drops: Volumen bleibt beim Mergen", near(mergedDrop.radius ** 3, 0.1 ** 3
 check("drops: Position massegewichtet", near(mergedDrop.position.x, 0.008 / 0.009));
 check("drops: Impuls bleibt", near(mergedDrop.velocity.x, 0.001 / 0.009));
 check("drops: größerer Tropfen bestimmt Zustand", mergedDrop.sliding === false && mergedDrop.floor === 0.5);
+
+const surfaceLetter = letters[CONFIG.WORD.indexOf("E")];
+updateLetter(surfaceLetter, surfaceLetter.top, 0);
+const surface = createSurface(surfaceLetter);
+updateSurface(surface, surfaceLetter);
+const barHeight = heightAt(surface, surfaceLetter.box.max.x - 0.08, 0);
+const stemHeight = heightAt(surface, surfaceLetter.box.min.x + 0.08, 0);
+lines.push(`info: E Höhe über Balken ${barHeight.toFixed(3)}, über Stamm ${stemHeight.toFixed(3)}`);
+check("surface: über dem unteren E-Balken ≈ Balkenoberkante", barHeight > 0.1 && barHeight < 0.3 && barHeight < stemHeight);
+check("surface: neben dem Buchstaben leer", heightAt(surface, surfaceLetter.box.max.x + 0.5, 0) === -Infinity && heightAt(surface, surfaceLetter.box.min.x - 0.5, 0) === -Infinity);
+surfaceLetter.falling.fill(1);
+updateSurface(surface, surfaceLetter);
+check("surface: fallende Vertices zählen nicht", surface.heights.every((height) => height === -Infinity));
+surfaceLetter.falling.fill(0);
 
 document.getElementById("out").textContent = lines.join("\n");
 document.title = failures ? `FAIL ${failures}` : "PASS";

@@ -11,6 +11,7 @@ export const BEVEL = 0.025;
 export const TESSELLATE_EDGE = 0.05;
 export const TESSELLATE_ITERATIONS = 10;
 export const CELL_SIZE = 0.1;
+export const SURFACE_CELL = 0.05;
 
 export const GRAVITY = -3;
 // TABLE: Oberkante des Tisches, der Partner-Tisch muss auf dieser Höhe liegen

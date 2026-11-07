@@ -6,6 +6,7 @@ import { createBreakage, takeBrokenPieces } from "./breakage.js";
 import { createDropSystem } from "./drops.js";
 import { createFlame } from "./flame.js";
 import { createTable } from "./table.js";
+import { createSurface, updateSurface } from "./surface.js";
 
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
@@ -37,7 +38,7 @@ const letters = await loadLetters(waxMaterial);
 const candles = letters.map((letter) => {
   scene.add(letter.mesh);
   updateLetter(letter, letter.top, 0);
-  return { letter, breakage: createBreakage(letter), flame: createFlame(scene) };
+  return { letter, breakage: createBreakage(letter), flame: createFlame(scene), surface: createSurface(letter) };
 });
 const drops = createDropSystem(scene, letters);
 
@@ -71,12 +72,13 @@ renderer.setAnimationLoop(() => {
   updateHud(frameSeconds);
 });
 
-function updateCandle({ letter, breakage, flame }, wasBurning, burnDt) {
+function updateCandle({ letter, breakage, flame, surface }, wasBurning, burnDt) {
   letter.burning = burnSeconds < CONFIG.BURN_SECONDS;
   if (!wasBurning) return;
   const burn = burnHeight(letter, burnSeconds);
   updateLetter(letter, burn, burnDt);
   takeBrokenPieces(letter, breakage, burn);
+  updateSurface(surface, letter);
   if (!letter.burning) {
     flame.extinguish();
     return;

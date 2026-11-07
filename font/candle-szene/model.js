@@ -118,6 +118,7 @@ function createLetter(geometry, material) {
     base: rest.slice(),
     restNormals,
     deposit: new Float32Array(capacity),
+    falling: new Uint8Array(capacity),
     floors,
     grid,
     wick,
