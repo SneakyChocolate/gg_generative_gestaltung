@@ -124,7 +124,7 @@ function render(pool, physics) {
   const boxSize = 2 * halfSize;
   field.reset();
   for (const drop of pool.drops) {
-    const resting = drop.body !== null && physics.isResting(drop.body);
+    const resting = !drop.sliding && drop.position.y - drop.radius <= CONFIG.TABLE_Y + 0.01;
     const radius = resting ? drop.radius * CONFIG.PUDDLE_SPREAD : drop.radius;
     const y = resting ? CONFIG.TABLE_Y - radius * CONFIG.PUDDLE_SINK : drop.position.y;
     const normalizedRadius = radius / boxSize;
