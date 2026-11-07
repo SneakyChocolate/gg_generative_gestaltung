@@ -46,7 +46,7 @@ async function gltfGeometries() {
   gltf.scene.traverse((child) => {
     if (child.isMesh) geometries.push(child.geometry.clone().applyMatrix4(child.matrixWorld));
   });
-  if (geometries.length === 0) throw new Error("glTF enthält keine Meshes");
+  if (geometries.length !== CONFIG.WORD.length) throw new Error(`glTF hat ${geometries.length} Meshes, erwartet ${CONFIG.WORD.length}`);
   return geometries.sort((a, b) => boundingBox(a).min.x - boundingBox(b).min.x);
 }
 
@@ -96,7 +96,7 @@ function createLetter(geometry, material) {
   }
   const box = boundingBox(geometry).clone();
   const wick = new THREE.Vector3(tallestColumnX(grid), box.max.y, (box.min.z + box.max.z) / 2);
-  const reach = Math.max(box.max.x - wick.x, wick.x - box.min.x, box.max.z - wick.z);
+  const reach = Math.hypot(Math.max(box.max.x - wick.x, wick.x - box.min.x), box.max.z - wick.z);
   return {
     mesh: new THREE.Mesh(geometry, material),
     rest,

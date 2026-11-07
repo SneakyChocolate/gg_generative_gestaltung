@@ -74,6 +74,12 @@ for (let i = 1; i < deformed.length; i += 3) {
 }
 check("heat: halb abgebrannt ist niedriger", highest < letters[0].top - 0.01);
 check("heat: nichts sinkt unter den Tisch", lowest >= CONFIG.TABLE_Y - 1e-6);
+const letterI = letters[CONFIG.WORD.indexOf("I")];
+updateLetter(letterI, burnHeight(letterI, CONFIG.BURN_SECONDS));
+const burnedI = letterI.mesh.geometry.getAttribute("position").array;
+let highestI = -Infinity;
+for (let i = 1; i < burnedI.length; i += 3) highestI = Math.max(highestI, burnedI[i]);
+check("heat: I ist am Ende ganz abgebrannt", highestI < CONFIG.TABLE_Y + 0.01);
 
 document.getElementById("out").textContent = lines.join("\n");
 document.title = failures ? `FAIL ${failures}` : "PASS";
