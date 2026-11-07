@@ -6,6 +6,7 @@ import { createBreakage, takeBrokenPieces } from "./breakage.js";
 import { createDropSystem } from "./drops.js";
 import { createFlame } from "./flame.js";
 import { createTable } from "./table.js";
+import { ConvexGeometry } from "three/addons/geometries/ConvexGeometry.js";
 
 // PHYSICS: Backend wird über CONFIG.PHYSICS_BACKEND gewählt, beide Module haben dieselbe Schnittstelle
 const { createPhysics } = await import(`./physics/${CONFIG.PHYSICS_BACKEND}.js`);
@@ -19,6 +20,9 @@ document.body.appendChild(renderer.domElement);
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(CONFIG.BACKGROUND_COLOR);
 scene.add(new THREE.HemisphereLight(CONFIG.AMBIENT_SKY, CONFIG.AMBIENT_GROUND, CONFIG.AMBIENT_INTENSITY));
+const fillLight = new THREE.DirectionalLight(CONFIG.FILL_COLOR, CONFIG.FILL_INTENSITY);
+fillLight.position.set(...CONFIG.FILL_POSITION);
+scene.add(fillLight);
 
 const camera = new THREE.PerspectiveCamera(CONFIG.CAMERA_FOV, innerWidth / innerHeight, 0.05, 50);
 camera.position.set(...CONFIG.CAMERA_POSITION);
@@ -91,11 +95,30 @@ function dropChunk(piece) {
   if (chunkCount >= CONFIG.MAX_CHUNKS) return;
   const size = piece.geometry.boundingBox.getSize(new THREE.Vector3());
   if (Math.min(size.x, size.y) < CONFIG.MIN_CHUNK_SIZE) return;
-  const chunk = new THREE.Mesh(piece.geometry, waxMaterial);
+  const chunk = new THREE.Mesh(solidGeometry(piece.geometry), waxMaterial);
   chunk.position.copy(piece.center);
   scene.add(chunk);
   physics.addChunk(chunk);
   chunkCount++;
+}
+
+function solidGeometry(shell) {
+  const positions = shell.getAttribute("position");
+  const colors = shell.getAttribute("color");
+  const points = [];
+  const average = new THREE.Color(0, 0, 0);
+  for (let i = 0; i < positions.count; i++) {
+    points.push(new THREE.Vector3().fromBufferAttribute(positions, i));
+    average.r += colors.getX(i) / positions.count;
+    average.g += colors.getY(i) / positions.count;
+    average.b += colors.getZ(i) / positions.count;
+  }
+  const solid = new ConvexGeometry(points);
+  const solidColors = new Float32Array(solid.getAttribute("position").count * 3);
+  for (let i = 0; i < solidColors.length; i += 3) average.toArray(solidColors, i);
+  solid.setAttribute("color", new THREE.BufferAttribute(solidColors, 3));
+  solid.computeBoundingBox();
+  return solid;
 }
 
 function updateHud(dt) {
