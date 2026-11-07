@@ -4,6 +4,7 @@ import { buildGrid, cellIndex, floorOf, tallestColumnX } from "./grid.js";
 import { loadLetters } from "./model.js";
 import { temperatureAt, burnHeight, wickHeight, waxColor, updateLetter } from "./heat.js";
 import { createBreakage, takeBrokenPieces } from "./breakage.js";
+import { mergeDrops } from "./drops.js";
 
 const lines = [];
 let failures = 0;
@@ -96,6 +97,14 @@ lines.push(`info: Brocken pro Buchstabe ${piecesPerLetter.join(", ")}`);
 check("breakage: I bleibt ganz", piecesPerLetter[CONFIG.WORD.indexOf("I")] === 0);
 check("breakage: E verliert Stücke", piecesPerLetter[CONFIG.WORD.indexOf("E")] > 0);
 check("breakage: T verliert Stücke", piecesPerLetter[CONFIG.WORD.indexOf("T")] > 0);
+
+const dropA = { radius: 0.1, position: new THREE.Vector3(0, 0, 0), velocity: new THREE.Vector3(1, 0, 0), temperature: 1, sliding: true, floor: 0, body: null };
+const dropB = { radius: 0.2, position: new THREE.Vector3(1, 0, 0), velocity: new THREE.Vector3(0, 0, 0), temperature: 0, sliding: false, floor: 0.5, body: null };
+const mergedDrop = mergeDrops(dropA, dropB);
+check("drops: Volumen bleibt beim Mergen", near(mergedDrop.radius ** 3, 0.1 ** 3 + 0.2 ** 3));
+check("drops: Position massegewichtet", near(mergedDrop.position.x, 0.008 / 0.009));
+check("drops: Impuls bleibt", near(mergedDrop.velocity.x, 0.001 / 0.009));
+check("drops: größerer Tropfen bestimmt Zustand", mergedDrop.sliding === false && mergedDrop.floor === 0.5);
 
 document.getElementById("out").textContent = lines.join("\n");
 document.title = failures ? `FAIL ${failures}` : "PASS";
