@@ -111,8 +111,12 @@ function mergeTouching(pool, physics) {
   }
 }
 
-function needsRender(pool, physics) {
+function isActive(pool, physics) {
   return pool.drops.some((drop) => drop.sliding || drop.temperature > 0 || !physics.isResting(drop.body));
+}
+
+function needsRender(pool, physics) {
+  return isActive(pool, physics) || !pool.settledRendered;
 }
 
 function render(pool, physics) {
@@ -134,4 +138,5 @@ function render(pool, physics) {
     );
   }
   field.update();
+  pool.settledRendered = !isActive(pool, physics);
 }

@@ -28,6 +28,7 @@ export const SAG = 0.05;
 export const BREAK_THICKNESS = 0.05;
 export const HEAT_WEAKENING = 0.8;
 export const MAX_CHUNKS = 40;
+export const MIN_CHUNK_SIZE = 0.04;
 
 export const DROP_INTERVAL = 0.5;
 export const DROP_MIN_R = 0.045;
