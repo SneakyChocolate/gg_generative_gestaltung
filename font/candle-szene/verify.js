@@ -3,6 +3,7 @@ import * as CONFIG from "./config.js";
 import { buildGrid, cellIndex, floorOf, tallestColumnX } from "./grid.js";
 import { loadLetters } from "./model.js";
 import { temperatureAt, burnHeight, wickHeight, waxColor, updateLetter } from "./heat.js";
+import { createBreakage, takeBrokenPieces } from "./breakage.js";
 
 const lines = [];
 let failures = 0;
@@ -80,6 +81,21 @@ const burnedI = letterI.mesh.geometry.getAttribute("position").array;
 let highestI = -Infinity;
 for (let i = 1; i < burnedI.length; i += 3) highestI = Math.max(highestI, burnedI[i]);
 check("heat: I ist am Ende ganz abgebrannt", highestI < CONFIG.TABLE_Y + 0.01);
+
+const piecesPerLetter = letters.map((letter) => {
+  const breakage = createBreakage(letter);
+  let pieces = 0;
+  for (let second = 0; second <= CONFIG.BURN_SECONDS; second += 1) {
+    const burn = burnHeight(letter, second);
+    updateLetter(letter, burn);
+    pieces += takeBrokenPieces(letter, breakage, burn).length;
+  }
+  return pieces;
+});
+lines.push(`info: Brocken pro Buchstabe ${piecesPerLetter.join(", ")}`);
+check("breakage: I bleibt ganz", piecesPerLetter[CONFIG.WORD.indexOf("I")] === 0);
+check("breakage: E verliert Stücke", piecesPerLetter[CONFIG.WORD.indexOf("E")] > 0);
+check("breakage: T verliert Stücke", piecesPerLetter[CONFIG.WORD.indexOf("T")] > 0);
 
 document.getElementById("out").textContent = lines.join("\n");
 document.title = failures ? `FAIL ${failures}` : "PASS";
