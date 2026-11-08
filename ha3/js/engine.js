@@ -26,7 +26,6 @@ import { setupInput } from './input.js';
 // Aufbau, Reset, Debug und der pro Frame ausgefuehrte Simulationsschritt.
 
 const loaderElement = document.getElementById('loader');
-const loaderText = document.getElementById('loaderText');
 const debugElement = document.getElementById('debug');
 const fadeElement = document.getElementById('fade');
 const hudElement = document.getElementById('hud');
@@ -205,7 +204,6 @@ export async function init() {
     setupEnvironment();
     initSmoke();
 
-    loaderText.textContent = 'Wachs wird gegossen …';
     const model = await loadModel();
     state.model = model;
     state.parts = model.parts;
@@ -215,7 +213,6 @@ export async function init() {
 
     // Die GLB-Umgebung liefert Tisch und Hintergrund. Schlaegt das Laden
     // fehl, bleibt die prozedurale Umgebung sichtbar und die Szene laeuft.
-    loaderText.textContent = 'Umgebung wird geladen …';
     try {
       const environment = await loadEnvironmentScene(model.width);
       if (environment) {

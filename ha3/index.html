@@ -163,15 +163,6 @@
       pointer-events: none;
     }
 
-    #loader .mark {
-      width: 52px;
-      height: 52px;
-      border-radius: 50%;
-      border: 1px solid rgba(216, 164, 90, 0.22);
-      border-top-color: var(--gold);
-      animation: spin 1.5s linear infinite;
-    }
-
     #loader p { margin: 0; }
 
     #loader .error {
@@ -185,7 +176,6 @@
       color: #d9b07a;
     }
 
-    @keyframes spin { to { transform: rotate(360deg); } }
 
     @media (max-width: 720px) {
       .legend { display: none; }
@@ -217,10 +207,7 @@
   <pre id="debug"></pre>
   <div id="fade"></div>
 
-  <div id="loader">
-    <div class="mark"></div>
-    <p id="loaderText">Wachs wird gegossen &hellip;</p>
-  </div>
+  <div id="loader" class="done"></div>
 
   <!-- Einstiegspunkt: main.js ruft setup()/draw() aus sketch.js auf. -->
   <script type="module" src="./js/main.js"></script>
