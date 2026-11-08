@@ -127,7 +127,7 @@ export class DropletSystem {
   }
 
   land(drop) {
-    const volume = (4 / 3) * Math.PI * drop.radius ** 3 * CONFIG.puddles.volumeScale;
+    const volume = (4 / 3) * Math.PI * drop.radius ** 3;
     state.puddles.add(drop.position.x, drop.position.z, volume, drop.temp);
   }
 

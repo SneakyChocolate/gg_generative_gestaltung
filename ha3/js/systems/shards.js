@@ -3,7 +3,8 @@ import { CONFIG } from '../config.js';
 import { materials } from '../materials.js';
 import { scene } from '../renderer.js';
 import { state } from '../state.js';
-import { clamp, rand } from '../utils.js';
+import { rand } from '../utils.js';
+import { flameHeatAt } from './wick.js';
 
 // Abgebrochene Wachsstuecke mit parabolischer Flugbahn und Aufschmelzen.
 
@@ -46,7 +47,8 @@ export class ShardSystem {
       ),
       volume: chunk.volume,
       restTime: 0,
-      meltTime: 0,
+      initialVolume: chunk.volume,
+      pendingVolume: 0,
       settled: false,
     });
 
@@ -88,24 +90,45 @@ export class ShardSystem {
           shard.restTime = 0;
         }
       } else {
-        shard.meltTime += dt;
-        if (shard.meltTime > CONFIG.shards.restMeltDelay) {
-          const fade = clamp(
-            (shard.meltTime - CONFIG.shards.restMeltDelay) / 0.9,
-            0,
-            1,
-          );
-          mesh.scale.setScalar(Math.max(0.001, 1 - fade));
-          if (fade >= 1) {
-            const volume = shard.volume * 1.2;
-            state.puddles.add(mesh.position.x, mesh.position.z, volume, 0.5);
-            scene.remove(mesh);
-            mesh.geometry.dispose();
-            this.shards.splice(i, 1);
-          }
-        }
+        const position = mesh.position;
+        const heat = Math.max(
+          flameHeatAt(position.x, position.y, position.z, CONFIG.shards.meltRadius),
+          state.puddles.warmthAt(position.x, position.z) * CONFIG.shards.puddleHeat,
+        );
+        if (heat > 0 && this.melt(shard, heat, dt)) this.shards.splice(i, 1);
       }
     }
+  }
+
+  // Schmilzt den Splitter anteilig: Volumen wandert in Tropfen-Portionen
+  // in die Pfuetze. Rueckgabe true, wenn der Splitter komplett weg ist.
+  melt(shard, heat, dt) {
+    const mesh = shard.mesh;
+    const lost = Math.min(
+      shard.volume,
+      shard.initialVolume * CONFIG.shards.meltRate * heat * dt,
+    );
+    shard.volume -= lost;
+    shard.pendingVolume += lost;
+
+    const gone = shard.volume <= shard.initialVolume * 0.02;
+    if (gone) shard.pendingVolume += shard.volume;
+    if (gone || shard.pendingVolume >= CONFIG.shards.dripVolume) {
+      state.puddles.add(mesh.position.x, mesh.position.z, shard.pendingVolume, 0.4 + heat * 0.5);
+      shard.pendingVolume = 0;
+    }
+
+    if (gone) {
+      scene.remove(mesh);
+      mesh.geometry.dispose();
+      return true;
+    }
+
+    mesh.scale.setScalar(Math.cbrt(shard.volume / shard.initialVolume));
+    mesh.updateMatrixWorld(true);
+    this.box.setFromObject(mesh);
+    mesh.position.y += CONFIG.tableY - this.box.min.y;
+    return false;
   }
 
   clear() {

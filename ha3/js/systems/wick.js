@@ -18,6 +18,17 @@ const wickGeometry = new THREE.CylinderGeometry(
 
 const UP = new THREE.Vector3(0, 1, 0);
 
+export function flameHeatAt(x, y, z, radius) {
+  let heat = 0;
+  for (const wick of state.wicks) {
+    if (!wick.active) continue;
+    const tip = wick.tipWorld;
+    const distance = Math.hypot(tip.x - x, tip.y - y, tip.z - z);
+    heat = Math.max(heat, (1 - distance / radius) * wick.lit);
+  }
+  return Math.max(0, heat);
+}
+
 export class Wick {
   constructor(part, anchor, index) {
     this.part = part;

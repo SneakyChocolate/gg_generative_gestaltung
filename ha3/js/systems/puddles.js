@@ -3,6 +3,7 @@ import { CONFIG, COLORS } from '../config.js';
 import { scene } from '../renderer.js';
 import { makeCanvas } from '../textures.js';
 import { clamp, lerp } from '../utils.js';
+import { flameHeatAt } from './wick.js';
 
 // Pfuetzen: addition von Metaballfeldern auf Canvas 2D oder Instanz-Discs.
 
@@ -125,8 +126,20 @@ export class PuddleSystem {
       thickness: CONFIG.puddles.thicknessStart,
       temp: clamp(temp, 0.2, 1),
       age: 0,
+      frozen: false,
     });
     this.merge();
+  }
+
+  // 0 = kalt/erstarrt, 1 = fluessig heiss. Dient Splittern als Waermequelle.
+  warmthAt(x, z) {
+    let warmth = 0;
+    for (const puddle of this.puddles) {
+      if (Math.hypot(puddle.x - x, puddle.z - z) > this.radiusOf(puddle)) continue;
+      const value = (puddle.temp - CONFIG.puddles.freezeTemp) / (1 - CONFIG.puddles.freezeTemp);
+      warmth = Math.max(warmth, value);
+    }
+    return Math.max(0, warmth);
   }
 
   radiusOf(puddle) {
@@ -136,11 +149,27 @@ export class PuddleSystem {
   update(dt) {
     for (const puddle of this.puddles) {
       puddle.age += dt;
-      puddle.thickness = Math.max(
-        CONFIG.puddles.thicknessMin,
-        puddle.thickness - CONFIG.puddles.thicknessRate * dt,
+      const flame = flameHeatAt(
+        puddle.x,
+        CONFIG.tableY,
+        puddle.z,
+        CONFIG.puddles.flameRadius,
       );
-      puddle.temp = Math.max(0.16, puddle.temp - CONFIG.puddles.coolRate * dt);
+      if (flame > 0) {
+        puddle.temp = Math.min(1, puddle.temp + flame * CONFIG.puddles.flameHeat * dt);
+      } else {
+        puddle.temp = Math.max(0.16, puddle.temp - CONFIG.puddles.coolRate * dt);
+      }
+
+      if (puddle.temp <= CONFIG.puddles.freezeTemp) puddle.frozen = true;
+      else if (puddle.temp >= CONFIG.puddles.thawTemp) puddle.frozen = false;
+
+      if (!puddle.frozen) {
+        puddle.thickness = Math.max(
+          CONFIG.puddles.thicknessMin,
+          puddle.thickness - CONFIG.puddles.thicknessRate * dt,
+        );
+      }
     }
 
     this.merge();
