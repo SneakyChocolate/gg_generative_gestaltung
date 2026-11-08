@@ -1,3 +1,8 @@
+# KI Nutzung
+
+Fuer diese Aufgabe wurde zur Erstellung des Codes 100% KI verwendet.
+Die Ideen und die 3D scene (scene.glb) wurden von uns ohne Hilfe von KI erstellt.
+
 # Weihnachten — eine Kerze aus Text
 
 Interaktive 3D-Szene für das Modul **Generative Gestaltung**. Das Wort
