@@ -7,7 +7,7 @@ Types of tasks:
 - *feat*: feature task
 - *bug*: bug fix
 
--[ ] stands for unfinished task. [x] stands for finished task. [~] stands for pending task.
+As ai model update the status of the tasks in this file. if a task is finished then mark it as [x]. if a task is pending then mark it as [~]. if a task is not started then it is marked as [ ].
 
 ---
 
