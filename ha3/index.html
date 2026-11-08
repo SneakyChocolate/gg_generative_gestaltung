@@ -1,0 +1,3530 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Weihnachten — eine Kerze aus Text</title>
+
+  <style>
+    :root {
+      --ink: #e8d9bd;
+      --muted: #9f8e73;
+      --gold: #d8a45a;
+      --bg: #080604;
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body {
+      margin: 0;
+      height: 100%;
+      overflow: hidden;
+      background: var(--bg);
+      color: var(--ink);
+      font-family: Georgia, "Times New Roman", serif;
+      touch-action: none;
+    }
+
+    canvas {
+      position: fixed;
+      inset: 0;
+      display: block;
+      width: 100%;
+      height: 100%;
+    }
+
+    /* Weiche Vignette: dunkelt die Raender ab, ohne das Zentrum zu verdecken. */
+    #vignette {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 4;
+      background:
+        radial-gradient(ellipse at 50% 54%, transparent 36%, rgba(0, 0, 0, 0.22) 70%, rgba(0, 0, 0, 0.72) 100%);
+      mix-blend-mode: multiply;
+    }
+
+    #hud {
+      position: fixed;
+      left: clamp(18px, 4vw, 64px);
+      bottom: clamp(20px, 5vh, 58px);
+      z-index: 10;
+      pointer-events: none;
+      transition: opacity 0.7s ease;
+      text-shadow: 0 2px 18px rgba(0, 0, 0, 0.7);
+      max-width: min(620px, 80vw);
+    }
+
+    #hud.hidden { opacity: 0; }
+
+    .kicker {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 12px;
+      color: var(--gold);
+      font-family: "Trebuchet MS", Verdana, sans-serif;
+      font-size: 10px;
+      letter-spacing: 0.32em;
+      text-transform: uppercase;
+    }
+
+    .kicker::before {
+      content: "";
+      width: 42px;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, var(--gold));
+      opacity: 0.8;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: clamp(30px, 4.6vw, 58px);
+      font-weight: 400;
+      letter-spacing: 0.14em;
+      line-height: 0.95;
+      text-transform: uppercase;
+      color: #f1e4ca;
+    }
+
+    .subtitle {
+      margin: 12px 0 18px;
+      color: var(--muted);
+      font-style: italic;
+      font-size: clamp(13px, 1.25vw, 16px);
+      letter-spacing: 0.02em;
+    }
+
+    .legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px 18px;
+      font-family: "Trebuchet MS", Verdana, sans-serif;
+      font-size: 9px;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      color: #8d7c64;
+    }
+
+    .legend b {
+      color: #c9ae80;
+      font-weight: 400;
+    }
+
+    #debug {
+      position: fixed;
+      top: 18px;
+      left: 18px;
+      z-index: 11;
+      display: none;
+      margin: 0;
+      padding: 12px 14px;
+      border: 1px solid rgba(216, 164, 90, 0.25);
+      background: rgba(8, 6, 4, 0.72);
+      color: #cdbb9d;
+      font: 11px/1.55 "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+      white-space: pre;
+      backdrop-filter: blur(6px);
+      pointer-events: none;
+    }
+
+    #debug.visible { display: block; }
+
+    #fade {
+      position: fixed;
+      inset: 0;
+      z-index: 20;
+      pointer-events: none;
+      background: #000;
+      opacity: 0;
+      transition: opacity 1.1s ease;
+    }
+
+    #loader {
+      position: fixed;
+      inset: 0;
+      z-index: 30;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 18px;
+      background: #080604;
+      color: #c9ae80;
+      font-family: "Trebuchet MS", Verdana, sans-serif;
+      font-size: 10px;
+      letter-spacing: 0.3em;
+      text-transform: uppercase;
+      transition: opacity 0.9s ease;
+    }
+
+    #loader.done {
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    #loader .mark {
+      width: 52px;
+      height: 52px;
+      border-radius: 50%;
+      border: 1px solid rgba(216, 164, 90, 0.22);
+      border-top-color: var(--gold);
+      animation: spin 1.5s linear infinite;
+    }
+
+    #loader p { margin: 0; }
+
+    #loader .error {
+      max-width: 440px;
+      text-align: center;
+      line-height: 1.8;
+      text-transform: none;
+      letter-spacing: 0.05em;
+      font-family: Georgia, serif;
+      font-size: 14px;
+      color: #d9b07a;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    @media (max-width: 720px) {
+      .legend { display: none; }
+      .subtitle { margin-bottom: 0; }
+    }
+  </style>
+
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+    }
+  }
+  </script>
+</head>
+<body>
+  <div id="vignette"></div>
+
+  <div id="hud">
+    <div class="kicker">Wachs &middot; Docht &middot; Hitze</div>
+    <h1>Weihnachten</h1>
+    <p class="subtitle">Eine Kerze, die aus einem Wort besteht.</p>
+    <div class="legend">
+      <span><b>Maus</b> Wind</span>
+      <span><b>R</b> neu anz&uuml;nden</span>
+      <span><b>P</b> Pause</span>
+      <span><b>D</b> Debug</span>
+      <span><b>H</b> UI</span>
+    </div>
+  </div>
+
+  <pre id="debug"></pre>
+  <div id="fade"></div>
+
+  <div id="loader">
+    <div class="mark"></div>
+    <p id="loaderText">Wachs wird gegossen &hellip;</p>
+  </div>
+
+  <script type="module">
+// =====================================================================
+//  WEIHNACHTEN — eine 3D-Kerze aus Text
+// ---------------------------------------------------------------------
+//  Eigenstaendige Arbeit fuer das Modul Generative Gestaltung.
+//  Das Wort besteht aus einzelnen Buchstaben-Meshes. Jeder Buchstabe
+//  traegt einen Docht. Hitze, Schwerkraft, Wind, Reibung, Oberflaechen-
+//  spannung und Tischkollision formen Wachs, Tropfen, Pfuetzen und
+//  abgebrochene Stuecke.
+//
+//  Quellen (alle Bibliotheken ueber CDN, keine eigenen GLSL-Shader):
+//  - Three.js r160: TextGeometry, FontLoader, GLTFLoader, OBJLoader,
+//    BufferGeometryUtils, RoomEnvironment, EffectComposer/UnrealBloomPass.
+//    https://threejs.org/docs/  https://github.com/mrdoob/three.js
+//  - Schrift: Gentilis Bold aus den Three.js-Beispielen
+//    (examples/fonts/gentilis_bold.typeface.json).
+//  - Kraftbegriffe inspiriert von Daniel Shiffman, The Nature of Code,
+//    Kapitel 6 (Kraft, Masse, Reibung, Schwerkraft). Die Umsetzung ist
+//    eigenstaendig und auf Wachs uebertragen.
+//  - Metaball-Idee: Summe von Radialgradienten auf Canvas 2D. Eigene
+//    Umsetzung ohne Shader; die Pfuetze ist eine weiche Aequipotential-
+//    flaeche aus addierten Tropfenfeldern.
+//  - Alle Texturen (Holz, Flamme, Rauch, Hintergrund) werden zur Laufzeit
+//    mit Canvas 2D erzeugt. Es werden keine Bilddateien geladen.
+// =====================================================================
+
+import * as THREE from 'three';
+import { FontLoader } from 'three/addons/loaders/FontLoader.js';
+import { TextGeometry } from 'three/addons/geometries/TextGeometry.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { OBJLoader } from 'three/addons/loaders/OBJLoader.js';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+
+// =====================================================================
+//  0. CONFIG — hier wird das Projekt eingestellt
+// =====================================================================
+
+const CONFIG = {
+  // CONFIG: Wort der Kerze. Grossbuchstaben geben allen Dochten dieselbe
+  // Hoehe; kleinere Buchstaben funktionieren ebenfalls (Docht sitzt dann
+  // auf dem jeweiligen Hochpunkt).
+  word: 'WEIHNACHTEN',
+
+  // MODEL: 'text' = TextGeometry, 'external' = .gltf/.glb/.obj,
+  // 'fallback' = Zylinder. Bei einem Ladefehler faellt alles auf den
+  // Zylinder zurueck, damit die Szene immer laeuft.
+  model: 'text',
+  externalModelUrl: '',
+
+  // PHYSICS: 'metaballs' = weiches Canvas-Metaballfeld fuer Pfuetzen,
+  // 'discs' = einzelne abgeflachte Instanzen (schneller, haertere Kanten).
+  physicsMode: 'metaballs',
+
+  // TABLE: Kollisionsebene. Der Partner kann diesen Wert an seinen Tisch
+  // anpassen; Tropfen, Splitter und Pfuetzen benutzen ausschliesslich ihn.
+  tableY: 0,
+
+  loopSeconds: 92,
+  bloom: true,
+
+  camera: {
+    fov: 38,
+    height: 3.0,
+    offsetX: 0.55,
+    targetY: 0.92,
+    margin: 1.08,
+  },
+
+  text: {
+    size: 0.92,
+    depth: 0.52,
+    spacing: 0.11,
+    curveSegments: 4,
+    bevelThickness: 0.03,
+    bevelSize: 0.022,
+    bevelSegments: 2,
+    fontUrl: 'https://cdn.jsdelivr.net/npm/three@0.160.0/examples/fonts/gentilis_bold.typeface.json',
+    fallbackFontUrl: 'https://cdn.jsdelivr.net/npm/three@0.160.0/examples/fonts/helvetiker_bold.typeface.json',
+  },
+
+  wick: {
+    height: 0.18,
+    radius: 0.012,
+    burnSpeed: 0.0018,
+    igniteGap: 0.16,
+    igniteDuration: 0.72,
+    lightEvery: 2,
+  },
+
+  heat: {
+    // Zwei Zonen: der Kern direkt an der Flamme und ein breiter Halo.
+    // Der Halo sorgt dafuer, dass auch die Nachbarvertices weich werden,
+    // bevor sie vom Docht direkt erreicht sind.
+    radius: 0.82,
+    haloRadius: 1.55,
+    haloStrength: 0.48,
+    heatRate: 2.35,
+    coolRate: 0.68,
+    // Waermeleitung entlang der Mesh-Kanten: Hitze kriecht in die
+    // Umgebung, statt nur einen runden Fleck zu erzeugen.
+    diffusion: 2.6,
+    meltThreshold: 0.34,
+    sagRate: 0.085,
+    maxSag: 0.27,
+    normalFlow: 0.19,
+    // Fluid-Relaxation: heisse Vertices werden geglaettet und stossen
+    // sich ab, wenn sich Kanten zu stark zusammendruecken.
+    flow: 2.8,
+    repulsion: 0.42,
+    minSpacing: 0.024,
+    neckStart: 0.52,
+    neckAmount: 0.34,
+  },
+
+  melt: {
+    dropInterval: 1.35,
+    dropJitter: 0.95,
+    dropPush: 0.32,
+    gravity: 4.8,
+    drag: 0.75,
+    maxDrops: 90,
+    radiusMin: 0.028,
+    radiusMax: 0.056,
+  },
+
+  puddles: {
+    max: 70,
+    thicknessStart: 0.032,
+    thicknessMin: 0.011,
+    thicknessRate: 0.00018,
+    volumeScale: 2.2,
+    mergeFactor: 0.72,
+    canvasWidth: 768,
+    depth: 3.4,
+    margin: 1.15,
+    coolRate: 0.16,
+  },
+
+  shards: {
+    max: 10,
+    gravity: 6.5,
+    drag: 0.35,
+    restMeltDelay: 2.4,
+    stressBase: 2.6,
+    stressWidth: 2.1,
+    cooldown: 13.0,
+    // Ein kleiner Steg haelt den abknickenden Wachslappen, bis das
+    // geschmolzene Gewicht darueber zu gross wird.
+    bridgeHeat: 0.45,
+    minChunkRatio: 0.035,
+    // Der Deckel eines Zylinders macht allein schon ~25 % der Dreiecke aus.
+    // Die Obergrenze muss also etwas groesser sein, damit auch das
+    // Fallback-Modell sauber brechen kann.
+    maxChunkRatio: 0.34,
+  },
+
+  wind: {
+    strength: 0.55,
+    flameSway: 0.055,
+    dropPush: 0.42,
+    smooth: 2.2,
+  },
+
+  smoke: { interval: 1.9, max: 10 },
+};
+
+const COLORS = {
+  background: 0x080604,
+  fog: 0x0a0705,
+  waxCold: [0.94, 0.87, 0.74],
+  waxWarm: [1.0, 0.79, 0.48],
+  waxHot: [0.95, 0.36, 0.12],
+  puddleCool: [0.56, 0.47, 0.34],
+  puddleWarm: [0.84, 0.54, 0.25],
+  flameOuter: 0xff6418,
+  flameMain: 0xffb24a,
+  flameCore: 0xfff6d6,
+  flameBlue: 0x4c9cff,
+};
+
+// =====================================================================
+//  1. KLEINE HELFER
+// =====================================================================
+
+const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
+const lerp = (a, b, t) => a + (b - a) * t;
+const rand = (min, max) => min + Math.random() * (max - min);
+
+function smoothstep(edge0, edge1, value) {
+  const t = clamp((value - edge0) / (edge1 - edge0), 0, 1);
+  return t * t * (3 - 2 * t);
+}
+
+// =====================================================================
+//  2. TEXTUREN — alles prozedural mit Canvas 2D
+// =====================================================================
+
+function makeCanvas(width, height) {
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  return canvas;
+}
+
+function finishTexture(canvas, { srgb = false, repeat = false } = {}) {
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = srgb ? THREE.SRGBColorSpace : THREE.NoColorSpace;
+  texture.needsUpdate = true;
+  if (repeat) {
+    texture.wrapS = THREE.RepeatWrapping;
+    texture.wrapT = THREE.RepeatWrapping;
+  }
+  texture.anisotropy = 4;
+  return texture;
+}
+
+// Weicher runder Fleck (Glow, Staub, Rauch).
+function makeSoftTexture(size = 128, inner = 'rgba(255,255,255,1)') {
+  const canvas = makeCanvas(size, size);
+  const ctx = canvas.getContext('2d');
+  const g = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
+  g.addColorStop(0, inner);
+  g.addColorStop(0.28, 'rgba(255,255,255,0.72)');
+  g.addColorStop(0.62, 'rgba(255,255,255,0.22)');
+  g.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, size, size);
+  return finishTexture(canvas, { srgb: true });
+}
+
+// Flaemmchen-Textur: weisser Kern, gelbe Mitte, oranger Rand.
+function makeFlameTexture(size = 128) {
+  const canvas = makeCanvas(size, size);
+  const ctx = canvas.getContext('2d');
+  const g = ctx.createRadialGradient(size / 2, size * 0.58, 0, size / 2, size * 0.58, size * 0.52);
+  g.addColorStop(0.0, 'rgba(255,255,248,1)');
+  g.addColorStop(0.16, 'rgba(255,248,190,0.98)');
+  g.addColorStop(0.36, 'rgba(255,214,110,0.92)');
+  g.addColorStop(0.62, 'rgba(255,135,32,0.55)');
+  g.addColorStop(0.84, 'rgba(255,64,8,0.16)');
+  g.addColorStop(1.0, 'rgba(255,40,0,0)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, size, size);
+  return finishTexture(canvas, { srgb: true });
+}
+
+// Rauch: mehrere weiche, leicht versetzte Wolken.
+function makeSmokeTexture(size = 128) {
+  const canvas = makeCanvas(size, size);
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, size, size);
+  for (let i = 0; i < 7; i++) {
+    const x = size * rand(0.32, 0.68);
+    const y = size * rand(0.3, 0.7);
+    const r = size * rand(0.12, 0.3);
+    const g = ctx.createRadialGradient(x, y, 0, x, y, r);
+    g.addColorStop(0, 'rgba(255,255,255,0.22)');
+    g.addColorStop(0.6, 'rgba(255,255,255,0.08)');
+    g.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, size, size);
+  }
+  return finishTexture(canvas, { srgb: true });
+}
+
+// Holz: dunkle Grundierung, wellige Jahresringe, feine Poren.
+function makeWoodTexture(width = 1024, height = 512) {
+  const canvas = makeCanvas(width, height);
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#2b1a11';
+  ctx.fillRect(0, 0, width, height);
+
+  for (let i = 0; i < 90; i++) {
+    const y0 = (i / 90) * height + rand(-8, 8);
+    const amplitude = rand(2, 13);
+    const frequency = rand(0.004, 0.012);
+    ctx.beginPath();
+    for (let x = 0; x <= width; x += 12) {
+      const y = y0 + Math.sin(x * frequency + i * 1.7) * amplitude + Math.sin(x * 0.003 + i) * 4;
+      if (x === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    }
+    ctx.strokeStyle = i % 4 === 0 ? 'rgba(110,66,35,0.24)' : 'rgba(15,8,4,0.18)';
+    ctx.lineWidth = rand(0.6, 2.2);
+    ctx.stroke();
+  }
+
+  // Poren / Staub.
+  for (let i = 0; i < 1400; i++) {
+    ctx.fillStyle = `rgba(${Math.random() > 0.5 ? '150,95,52' : '8,4,2'},${rand(0.03, 0.13)})`;
+    ctx.beginPath();
+    ctx.ellipse(rand(0, width), rand(0, height), rand(0.5, 3.5), rand(0.4, 1.8), rand(0, Math.PI), 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  return finishTexture(canvas, { srgb: true, repeat: true });
+}
+
+// Dunkelgruener Stoff fuer den Laeufer unter der Kerze.
+function makeRunnerTexture(width = 512, height = 256) {
+  const canvas = makeCanvas(width, height);
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#13251a';
+  ctx.fillRect(0, 0, width, height);
+
+  // Webstruktur: winzige helle und dunkle Fadenkreuze.
+  for (let y = 0; y < height; y += 4) {
+    for (let x = 0; x < width; x += 4) {
+      const light = Math.random() > 0.55;
+      ctx.fillStyle = light ? 'rgba(80,110,74,0.09)' : 'rgba(0,0,0,0.12)';
+      ctx.fillRect(x, y, 3, 1);
+      ctx.fillRect(x, y, 1, 3);
+    }
+  }
+
+  // Zwei schmale Goldkanten.
+  ctx.fillStyle = 'rgba(183,136,68,0.55)';
+  ctx.fillRect(0, 0, width, 3);
+  ctx.fillRect(0, height - 3, width, 3);
+
+  return finishTexture(canvas, { srgb: true, repeat: true });
+}
+
+// Hintergrund: dunkler Raum mit warmem Lichtschein hinter dem Wort.
+function makeBackdropTexture(width = 1024, height = 512) {
+  const canvas = makeCanvas(width, height);
+  const ctx = canvas.getContext('2d');
+  const base = ctx.createLinearGradient(0, 0, 0, height);
+  base.addColorStop(0, '#040302');
+  base.addColorStop(0.52, '#0b0705');
+  base.addColorStop(1, '#1b1009');
+  ctx.fillStyle = base;
+  ctx.fillRect(0, 0, width, height);
+
+  const glow = ctx.createRadialGradient(width * 0.5, height * 0.58, 0, width * 0.5, height * 0.58, width * 0.5);
+  glow.addColorStop(0, 'rgba(120,58,18,0.30)');
+  glow.addColorStop(0.45, 'rgba(70,32,10,0.12)');
+  glow.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = glow;
+  ctx.fillRect(0, 0, width, height);
+
+  // Ganz feines Korn gegen Banding.
+  for (let i = 0; i < 9000; i++) {
+    const a = Math.random() * 0.025;
+    ctx.fillStyle = `rgba(255,220,170,${a})`;
+    ctx.fillRect(Math.random() * width, Math.random() * height, 1, 1);
+  }
+
+  return finishTexture(canvas, { srgb: true });
+}
+
+// =====================================================================
+//  3. RENDERER, KAMERA, LICHT, UMGEBUNG
+// =====================================================================
+
+const state = {
+  ready: false,
+  paused: false,
+  resetting: false,
+  elapsed: 0,
+  time: 0,
+  normalFrame: 0,
+  wind: new THREE.Vector3(),
+  windTarget: new THREE.Vector3(),
+  fps: 60,
+  fpsFrames: 0,
+  fpsTime: 0,
+  model: null,
+  wicks: [],
+  parts: [],
+  drops: null,
+  puddles: null,
+  shards: null,
+  smoke: [],
+  smokeTimer: 0,
+};
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(COLORS.background);
+scene.fog = new THREE.FogExp2(COLORS.fog, 0.018);
+
+const camera = new THREE.PerspectiveCamera(CONFIG.camera.fov, 1, 0.1, 80);
+camera.position.set(0.55, 3.0, 10);
+
+const renderer = new THREE.WebGLRenderer({
+  antialias: true,
+  powerPreference: 'high-performance',
+});
+renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.65));
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.12;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+document.body.appendChild(renderer.domElement);
+
+const textures = {
+  soft: makeSoftTexture(128),
+  flame: makeFlameTexture(128),
+  smoke: makeSmokeTexture(128),
+  wood: makeWoodTexture(),
+  runner: makeRunnerTexture(),
+  backdrop: makeBackdropTexture(),
+};
+
+textures.wood.repeat.set(2.4, 1.5);
+textures.runner.repeat.set(3.2, 1.0);
+
+// --- Materialien -----------------------------------------------------
+
+const materials = {
+  wax: new THREE.MeshPhysicalMaterial({
+    color: 0xffffff,
+    vertexColors: true,
+    roughness: 0.32,
+    metalness: 0.0,
+    clearcoat: 0.72,
+    clearcoatRoughness: 0.35,
+    sheen: 0.45,
+    sheenColor: new THREE.Color(0xffd6a0),
+    sheenRoughness: 0.62,
+    envMapIntensity: 0.45,
+    emissive: new THREE.Color(0x180902),
+    emissiveIntensity: 0.55,
+    // Nach dem echten Schnitt sind alle Bruchflaechen gecappt. FrontSide
+    // verhindert, dass man durch offene Stellen ins Mesh-Innere sieht.
+    side: THREE.FrontSide,
+  }),
+
+  wick: new THREE.MeshStandardMaterial({
+    color: 0x2a1a10,
+    roughness: 0.95,
+    metalness: 0.0,
+  }),
+
+  drop: new THREE.MeshPhysicalMaterial({
+    color: 0xffe5c0,
+    roughness: 0.18,
+    metalness: 0.0,
+    clearcoat: 1.0,
+    clearcoatRoughness: 0.16,
+    envMapIntensity: 0.75,
+    emissive: new THREE.Color(0x2a1003),
+    emissiveIntensity: 0.6,
+  }),
+
+  table: new THREE.MeshStandardMaterial({
+    color: 0x6a4529,
+    map: textures.wood,
+    roughness: 0.62,
+    metalness: 0.04,
+    bumpMap: textures.wood,
+    bumpScale: 0.018,
+    envMapIntensity: 0.18,
+  }),
+
+  runner: new THREE.MeshStandardMaterial({
+    color: 0x294531,
+    map: textures.runner,
+    roughness: 0.94,
+    metalness: 0.0,
+    bumpMap: textures.runner,
+    bumpScale: 0.006,
+  }),
+
+  gold: new THREE.MeshPhysicalMaterial({
+    color: 0xb7843e,
+    metalness: 1.0,
+    roughness: 0.22,
+    envMapIntensity: 1.15,
+  }),
+
+  baubleRed: new THREE.MeshPhysicalMaterial({
+    color: 0x7e1717,
+    metalness: 0.55,
+    roughness: 0.16,
+    clearcoat: 1.0,
+    clearcoatRoughness: 0.08,
+    envMapIntensity: 1.25,
+  }),
+
+  fir: new THREE.MeshStandardMaterial({
+    color: 0x183323,
+    roughness: 0.92,
+    metalness: 0.0,
+  }),
+
+  flameOuter: new THREE.SpriteMaterial({
+    map: textures.soft,
+    color: COLORS.flameOuter,
+    transparent: true,
+    opacity: 0.16,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+    depthTest: true,
+  }),
+
+  flameMain: new THREE.SpriteMaterial({
+    map: textures.flame,
+    color: COLORS.flameMain,
+    transparent: true,
+    opacity: 1.0,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+    depthTest: true,
+  }),
+
+  flameCore: new THREE.SpriteMaterial({
+    map: textures.flame,
+    color: COLORS.flameCore,
+    transparent: true,
+    opacity: 0.92,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+    depthTest: true,
+  }),
+
+  flameBlue: new THREE.SpriteMaterial({
+    map: textures.soft,
+    color: COLORS.flameBlue,
+    transparent: true,
+    opacity: 0.5,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+    depthTest: true,
+  }),
+};
+
+// Shards benutzen dasselbe Wachsmaterial. Auch sie sind nach dem Schnitt
+// geschlossen und brauchen deshalb keine sichtbaren Rueckseiten.
+materials.shard = materials.wax.clone();
+materials.shard.side = THREE.FrontSide;
+
+// --- Kamera an das Wort anpassen ------------------------------------
+
+function fitCamera(wordWidth) {
+  const aspect = window.innerWidth / window.innerHeight;
+  camera.aspect = aspect;
+  const halfWidth = Math.max(3.4, wordWidth / 2 + 0.75);
+  const halfHeight = 1.55;
+  const vFov = THREE.MathUtils.degToRad(camera.fov);
+  const distanceForWidth = halfWidth / (Math.tan(vFov / 2) * aspect);
+  const distanceForHeight = halfHeight / Math.tan(vFov / 2);
+  const distance = Math.max(distanceForWidth, distanceForHeight) * CONFIG.camera.margin;
+  camera.position.set(
+    CONFIG.camera.offsetX,
+    CONFIG.tableY + CONFIG.camera.height,
+    distance,
+  );
+  camera.lookAt(0, CONFIG.tableY + CONFIG.camera.targetY, 0);
+  camera.updateProjectionMatrix();
+}
+
+// --- Licht -----------------------------------------------------------
+
+function setupLights() {
+  const ambient = new THREE.AmbientLight(0x40281a, 0.55);
+  scene.add(ambient);
+
+  const hemisphere = new THREE.HemisphereLight(0x2b3950, 0x27140b, 0.34);
+  scene.add(hemisphere);
+
+  // Warmes Hauptlicht mit Schatten. Es kommt von links oben, damit die
+  // Buchstaben plastisch stehen und die Flammen nicht dagegen ankaempfen.
+  const key = new THREE.DirectionalLight(0xffdfb8, 1.28);
+  key.position.set(-5.5, CONFIG.tableY + 8.5, 6.0);
+  key.target.position.set(0, CONFIG.tableY + 0.45, 0);
+  key.castShadow = true;
+  key.shadow.mapSize.set(1024, 1024);
+  key.shadow.camera.left = -9;
+  key.shadow.camera.right = 9;
+  key.shadow.camera.top = 7;
+  key.shadow.camera.bottom = -5;
+  key.shadow.camera.near = 1;
+  key.shadow.camera.far = 30;
+  key.shadow.bias = -0.0006;
+  key.shadow.radius = 3.5;
+  scene.add(key);
+  scene.add(key.target);
+
+  // Kuehles Gegenlicht von hinten rechts: trennt das Wort vom Hintergrund.
+  const rim = new THREE.DirectionalLight(0x5f7ea8, 0.36);
+  rim.position.set(5, CONFIG.tableY + 4, -6);
+  rim.target.position.set(0, CONFIG.tableY + 0.7, 0);
+  scene.add(rim);
+  scene.add(rim.target);
+
+  // Warme Aufhellung von vorne rechts (kein Schatten, kostet wenig).
+  const fill = new THREE.SpotLight(0xffa95c, 26, 22, 0.62, 0.9, 1.7);
+  fill.position.set(4.5, CONFIG.tableY + 5.5, 5.0);
+  fill.target.position.set(0, CONFIG.tableY + 0.55, 0);
+  scene.add(fill);
+  scene.add(fill.target);
+}
+
+// --- Umgebung, Tisch, Hintergrund -----------------------------------
+
+function setupEnvironment() {
+  // Weiche Raumreflexion fuer Wachs und Kugeln. Kein eigener Shader.
+  const pmrem = new THREE.PMREMGenerator(renderer);
+  const room = new RoomEnvironment();
+  const envTexture = pmrem.fromScene(room, 0.04).texture;
+  scene.environment = envTexture;
+  room.dispose();
+  pmrem.dispose();
+
+  // Hintergrundwand.
+  const backdrop = new THREE.Mesh(
+    new THREE.PlaneGeometry(46, 24),
+    new THREE.MeshBasicMaterial({ map: textures.backdrop, fog: false }),
+  );
+  backdrop.position.set(0, CONFIG.tableY + 7.0, -10.5);
+  scene.add(backdrop);
+
+  // Tischplatte. TABLE: Die Kollisionsebene ist CONFIG.tableY.
+  const table = new THREE.Mesh(
+    new THREE.PlaneGeometry(32, 18),
+    materials.table,
+  );
+  table.rotation.x = -Math.PI / 2;
+  table.position.y = CONFIG.tableY;
+  table.receiveShadow = true;
+  scene.add(table);
+
+  // Dunkelgruener Laeufer unter dem Wort.
+  const runner = new THREE.Mesh(
+    new THREE.PlaneGeometry(13.5, 3.9),
+    materials.runner,
+  );
+  runner.rotation.x = -Math.PI / 2;
+  runner.position.set(0, CONFIG.tableY + 0.0015, 0.1);
+  runner.receiveShadow = true;
+  scene.add(runner);
+
+  // Zwei Goldkugeln als Weihnachtsstillleben, links und rechts.
+  addBauble(-4.75, 0.95, 0.26, materials.gold);
+  addBauble(4.65, 0.62, 0.18, materials.baubleRed);
+  addFirSprig();
+
+  // Staub in der Luft: kleine warme Punkte, die langsam treiben.
+  createDust();
+  createBokeh();
+}
+
+function addBauble(x, z, radius, material) {
+  const group = new THREE.Group();
+  group.position.set(x, CONFIG.tableY, z);
+
+  const ball = new THREE.Mesh(new THREE.SphereGeometry(radius, 24, 16), material);
+  ball.position.y = radius;
+  ball.castShadow = true;
+  ball.receiveShadow = true;
+  group.add(ball);
+
+  const cap = new THREE.Mesh(
+    new THREE.CylinderGeometry(radius * 0.13, radius * 0.13, radius * 0.16, 10),
+    materials.gold,
+  );
+  cap.position.y = radius * 2.02;
+  group.add(cap);
+
+  const loop = new THREE.Mesh(
+    new THREE.TorusGeometry(radius * 0.12, radius * 0.025, 6, 16),
+    materials.gold,
+  );
+  loop.position.y = radius * 2.16;
+  loop.rotation.x = Math.PI / 2;
+  group.add(loop);
+
+  scene.add(group);
+}
+
+// Stilisierter Tannenzweig: duenne Kegel als Nadeln, flach auf dem Tisch.
+function addFirSprig() {
+  const needleGeometry = new THREE.ConeGeometry(0.016, 0.26, 4);
+  needleGeometry.translate(0, 0.13, 0);
+  const count = 76;
+  const needles = new THREE.InstancedMesh(needleGeometry, materials.fir, count);
+  needles.castShadow = false;
+  needles.receiveShadow = true;
+
+  const dummy = new THREE.Object3D();
+  for (let i = 0; i < count; i++) {
+    const t = i / (count - 1);
+    const side = i % 2 === 0 ? 1 : -1;
+    dummy.position.set(
+      -5.25 + t * 1.55 + rand(-0.04, 0.04),
+      CONFIG.tableY + 0.018 + rand(0, 0.012),
+      1.55 + Math.sin(t * Math.PI) * 0.12 + rand(-0.05, 0.05),
+    );
+    dummy.rotation.set(
+      -Math.PI / 2 + rand(-0.18, 0.18),
+      rand(-0.2, 0.2),
+      side * rand(0.65, 1.15),
+    );
+    dummy.scale.setScalar(rand(0.7, 1.25));
+    dummy.updateMatrix();
+    needles.setMatrixAt(i, dummy.matrix);
+  }
+  needles.instanceMatrix.needsUpdate = true;
+  scene.add(needles);
+
+  const stem = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.012, 0.02, 1.6, 5),
+    materials.fir,
+  );
+  stem.rotation.z = Math.PI / 2;
+  stem.rotation.y = 0.04;
+  stem.position.set(-4.48, CONFIG.tableY + 0.02, 1.55);
+  scene.add(stem);
+}
+
+let dust;
+function createDust() {
+  const count = 140;
+  const positions = new Float32Array(count * 3);
+  for (let i = 0; i < count; i++) {
+    positions[i * 3 + 0] = rand(-7, 7);
+    positions[i * 3 + 1] = CONFIG.tableY + rand(0.1, 4.5);
+    positions[i * 3 + 2] = rand(-3.5, 4.5);
+  }
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  dust = new THREE.Points(geometry, new THREE.PointsMaterial({
+    map: textures.soft,
+    color: 0xffd7a0,
+    size: 0.032,
+    transparent: true,
+    opacity: 0.5,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+    sizeAttenuation: true,
+  }));
+  dust.frustumCulled = false;
+  scene.add(dust);
+}
+
+let bokeh;
+function createBokeh() {
+  const count = 70;
+  const positions = new Float32Array(count * 3);
+  const colors = new Float32Array(count * 3);
+  const color = new THREE.Color();
+  for (let i = 0; i < count; i++) {
+    const x = rand(-10, 10);
+    positions[i * 3 + 0] = x;
+    positions[i * 3 + 1] = CONFIG.tableY + 2.4 + Math.sin(x * 0.55) * 0.9 + rand(-0.85, 0.85);
+    positions[i * 3 + 2] = rand(-7.5, -3.5);
+    const hue = rand(0.07, 0.13);
+    const warm = Math.random() > 0.16;
+    color.setHSL(warm ? hue : rand(0.0, 0.02), warm ? 0.72 : 0.55, warm ? 0.62 : 0.36);
+    colors[i * 3 + 0] = color.r;
+    colors[i * 3 + 1] = color.g;
+    colors[i * 3 + 2] = color.b;
+  }
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+  bokeh = new THREE.Points(geometry, new THREE.PointsMaterial({
+    map: textures.soft,
+    vertexColors: true,
+    size: 0.3,
+    transparent: true,
+    opacity: 0.7,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+    sizeAttenuation: true,
+    fog: false,
+  }));
+  bokeh.frustumCulled = false;
+  scene.add(bokeh);
+}
+
+// =====================================================================
+//  4. MODELL-LADER — TextGeometry / externes Modell / Fallback
+// =====================================================================
+
+async function loadFont() {
+  const loader = new FontLoader();
+  try {
+    return await loader.loadAsync(CONFIG.text.fontUrl);
+  } catch (error) {
+    console.warn('Gentilis konnte nicht geladen werden, versuche Helvetiker.', error);
+    return await loader.loadAsync(CONFIG.text.fallbackFontUrl);
+  }
+}
+
+function makeTextGeometry(character, font) {
+  let geometry = new TextGeometry(character, {
+    font,
+    size: CONFIG.text.size,
+    height: CONFIG.text.depth,
+    curveSegments: CONFIG.text.curveSegments,
+    bevelEnabled: true,
+    bevelThickness: CONFIG.text.bevelThickness,
+    bevelSize: CONFIG.text.bevelSize,
+    bevelOffset: 0,
+    bevelSegments: CONFIG.text.bevelSegments,
+  });
+  if (geometry.index) {
+    const nonIndexed = geometry.toNonIndexed();
+    geometry.dispose();
+    geometry = nonIndexed;
+  }
+  return geometry;
+}
+
+// Jeder Buchstabe ist ein eigenes Mesh. Dadurch sitzt genau ein Docht
+// auf jedem Buchstaben und ein Bruch kann nur diesen Buchstaben treffen.
+function createTextModel(font) {
+  const group = new THREE.Group();
+  const entries = [];
+  let cursor = 0;
+
+  for (const character of CONFIG.word) {
+    if (character === ' ' || character === '\n') {
+      cursor += CONFIG.text.size * 0.46;
+      continue;
+    }
+
+    const geometry = makeTextGeometry(character, font);
+    geometry.computeBoundingBox();
+    const box = geometry.boundingBox;
+    const width = box.max.x - box.min.x;
+
+    // Auf linke Kante, Unterkante und z-Mitte legen.
+    geometry.translate(
+      -box.min.x,
+      -box.min.y,
+      -(box.min.z + box.max.z) / 2,
+    );
+    geometry.computeBoundingBox();
+
+    const mesh = new THREE.Mesh(geometry, materials.wax);
+    mesh.position.set(cursor, 0, 0);
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    group.add(mesh);
+
+    entries.push({ mesh, width });
+    cursor += width + CONFIG.text.spacing;
+  }
+
+  const totalWidth = Math.max(0.1, cursor - CONFIG.text.spacing);
+  const shift = -totalWidth / 2;
+  for (const entry of entries) {
+    entry.mesh.position.x += shift;
+  }
+  group.updateMatrixWorld(true);
+
+  const parts = entries.map((entry, index) => createPart(entry.mesh, index));
+  const wicks = parts.map((part, index) => {
+    const anchor = findWickAnchors(part.geometry, part.bbox, 1)[0];
+    const wick = new Wick(part, anchor, index);
+    part.heatWicks = [wick];
+    return wick;
+  });
+
+  return { group, parts, wicks, width: totalWidth, kind: 'text' };
+}
+
+// Geometrie fuer den generischen Pfad: nur Position und Normale behalten,
+// damit sich verschiedene Blender-Teile sicher verschmelzen lassen.
+function sanitizeGeometry(geometry) {
+  let result = geometry.index ? geometry.toNonIndexed() : geometry;
+  for (const name of Object.keys(result.attributes)) {
+    if (name !== 'position' && name !== 'normal') result.deleteAttribute(name);
+  }
+  if (!result.attributes.normal) result.computeVertexNormals();
+  return result;
+}
+
+async function loadExternalGeometry(url) {
+  if (!url) throw new Error('CONFIG.externalModelUrl ist leer.');
+
+  const clean = url.split('?')[0].toLowerCase();
+  let root;
+  if (clean.endsWith('.obj')) {
+    root = await new OBJLoader().loadAsync(url);
+  } else if (clean.endsWith('.glb') || clean.endsWith('.gltf')) {
+    root = (await new GLTFLoader().loadAsync(url)).scene;
+  } else {
+    throw new Error('Unbekanntes Modellformat: ' + url);
+  }
+
+  root.updateMatrixWorld(true);
+  const geometries = [];
+  root.traverse((child) => {
+    if (!child.isMesh || !child.geometry) return;
+    const geometry = sanitizeGeometry(child.geometry.clone());
+    geometry.applyMatrix4(child.matrixWorld);
+    geometries.push(geometry);
+  });
+
+  if (geometries.length === 0) throw new Error('Das Modell enthaelt keine Meshes.');
+  const merged = mergeGeometries(geometries, false);
+  if (!merged) {
+    console.warn('Geometrien konnten nicht verschmolzen werden; nutze erstes Mesh.');
+    return geometries[0];
+  }
+  return merged;
+}
+
+// Externe Modelle und Fallback werden auf dieselbe Hoehe gebracht und
+// mit einem oder mehreren Dochten versehen. Damit ist der Loader
+// austauschbar, ohne dass die restliche Simulation etwas merkt.
+function createGenericModel(geometry, kind) {
+  let result = geometry;
+  if (result.index) {
+    const nonIndexed = result.toNonIndexed();
+    result.dispose();
+    result = nonIndexed;
+  }
+
+  result.computeBoundingBox();
+  const firstBox = result.boundingBox;
+  const firstSize = new THREE.Vector3();
+  firstBox.getSize(firstSize);
+  const targetHeight = 1.55;
+  const scale = targetHeight / Math.max(firstSize.y, 1e-4);
+  result.scale(scale, scale, scale);
+
+  result.computeBoundingBox();
+  const box = result.boundingBox;
+  result.translate(
+    -(box.min.x + box.max.x) / 2,
+    -box.min.y,
+    -(box.min.z + box.max.z) / 2,
+  );
+  result.computeBoundingBox();
+
+  const mesh = new THREE.Mesh(result, materials.wax);
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
+
+  const group = new THREE.Group();
+  group.add(mesh);
+
+  const part = createPart(mesh, 0);
+  const width = part.bbox.max.x - part.bbox.min.x;
+  const wickCount = Math.max(1, Math.round(width / 1.15));
+  const anchors = findWickAnchors(part.geometry, part.bbox, wickCount);
+  const wicks = anchors.map((anchor, index) => new Wick(part, anchor, index));
+  part.heatWicks = wicks;
+
+  return { group, parts: [part], wicks, width, kind };
+}
+
+function createFallbackModel() {
+  const geometry = new THREE.CylinderGeometry(0.64, 0.78, 1.55, 48, 1, false);
+  return createGenericModel(geometry, 'fallback');
+}
+
+async function loadModel() {
+  if (CONFIG.model === 'external') {
+    try {
+      const geometry = await loadExternalGeometry(CONFIG.externalModelUrl);
+      return createGenericModel(geometry, 'external');
+    } catch (error) {
+      console.warn('Externes Modell fehlgeschlagen, nutze Fallback-Zylinder.', error);
+      return createFallbackModel();
+    }
+  }
+
+  if (CONFIG.model === 'fallback') {
+    return createFallbackModel();
+  }
+
+  try {
+    const font = await loadFont();
+    return createTextModel(font);
+  } catch (error) {
+    console.warn('Font/TextGeometry fehlgeschlagen, nutze Fallback-Zylinder.', error);
+    return createFallbackModel();
+  }
+}
+
+// Docht-Anker: Punkte auf der obersten Flaeche. Bei mehreren Dochten
+// wird die Breite in Zonen geteilt, damit sie nicht alle in der Mitte sitzen.
+function findWickAnchors(geometry, bbox, count) {
+  const positions = geometry.attributes.position.array;
+  const height = bbox.max.y - bbox.min.y;
+  const topBand = Math.max(0.008, height * 0.035);
+  const centerX = (bbox.min.x + bbox.max.x) / 2;
+  const centerZ = (bbox.min.z + bbox.max.z) / 2;
+  const candidates = [];
+
+  for (let i = 0; i < positions.length; i += 3) {
+    const x = positions[i];
+    const y = positions[i + 1];
+    const z = positions[i + 2];
+    if (y >= bbox.max.y - topBand) candidates.push({ x, y, z });
+  }
+
+  if (candidates.length === 0) {
+    return [new THREE.Vector3(centerX, bbox.max.y, centerZ)];
+  }
+
+  const anchors = [];
+  for (let zone = 0; zone < count; zone++) {
+    const zoneMin = bbox.min.x + ((bbox.max.x - bbox.min.x) * zone) / count;
+    const zoneMax = bbox.min.x + ((bbox.max.x - bbox.min.x) * (zone + 1)) / count;
+    const zoneCenter = (zoneMin + zoneMax) / 2;
+    let best = null;
+    let bestScore = Infinity;
+
+    for (const candidate of candidates) {
+      const inZone = candidate.x >= zoneMin && candidate.x <= zoneMax;
+      const distanceToZone = Math.abs(candidate.x - zoneCenter);
+      const score = (inZone ? 0 : 5) + distanceToZone + Math.abs(candidate.z - centerZ) * 0.3;
+      if (score < bestScore) {
+        bestScore = score;
+        best = candidate;
+      }
+    }
+
+    if (best) anchors.push(new THREE.Vector3(best.x, best.y - 0.004, best.z));
+  }
+
+  return anchors.length ? anchors : [new THREE.Vector3(centerX, bbox.max.y, centerZ)];
+}
+
+// =====================================================================
+//  5. BUCHSTABEN-PHYSIK — Waerme, Schmelzen, Bruch
+// =====================================================================
+
+function createPart(mesh, id) {
+  const geometry = mesh.geometry;
+  if (!geometry.attributes.color) {
+    const colors = new Float32Array(geometry.attributes.position.count * 3);
+    const attribute = new THREE.BufferAttribute(colors, 3);
+    attribute.setUsage(THREE.DynamicDrawUsage);
+    geometry.setAttribute('color', attribute);
+  }
+  geometry.attributes.position.setUsage(THREE.DynamicDrawUsage);
+  if (geometry.attributes.normal) geometry.attributes.normal.setUsage(THREE.DynamicDrawUsage);
+  geometry.attributes.color.setUsage(THREE.DynamicDrawUsage);
+  geometry.computeBoundingBox();
+
+  return new CandlePart(mesh, geometry, geometry.boundingBox.clone(), id);
+}
+
+// ---------------------------------------------------------------------
+//  Mesh-Topologie
+// ---------------------------------------------------------------------
+//  TextGeometry ist non-indexed: Jede Dreiecks-Ecke ist ein eigener Vertex.
+//  Fuer Waermeleitung, Fluessigkeits-Relaxation und weiche Normalen muessen
+//  wir wissen, welche Vertices eigentlich derselbe Punkt sind. Diese
+//  Funktion verschweisst sie ueber ihre Position und baut daraus:
+//  - uniqueOfVertex: Rendervertex -> logischer Vertex
+//  - Nachbarschaften fuer Waermeleitung und Glaettung
+//  - Kanten + Ruhelaengen fuer die Abstandserhaltung
+// ---------------------------------------------------------------------
+function buildMeshTopology(geometry) {
+  const position = geometry.attributes.position;
+  const pos = position.array;
+  const count = position.count;
+  const keyToUnique = new Map();
+  const uniqueOfVertex = new Int32Array(count);
+  const uniqueList = [];
+  const quant = 10000;
+
+  for (let i = 0; i < count; i++) {
+    const ix = i * 3;
+    const key = `${Math.round(pos[ix] * quant)}|${Math.round(pos[ix + 1] * quant)}|${Math.round(pos[ix + 2] * quant)}`;
+    let unique = keyToUnique.get(key);
+    if (unique === undefined) {
+      unique = uniqueList.length / 3;
+      keyToUnique.set(key, unique);
+      uniqueList.push(pos[ix], pos[ix + 1], pos[ix + 2]);
+    }
+    uniqueOfVertex[i] = unique;
+  }
+
+  const uniqueCount = uniqueList.length / 3;
+  const uniqueBase = new Float32Array(uniqueList);
+  const neighborSets = new Array(uniqueCount);
+  for (let i = 0; i < uniqueCount; i++) neighborSets[i] = new Set();
+
+  for (let i = 0; i < count; i += 3) {
+    const a = uniqueOfVertex[i];
+    const b = uniqueOfVertex[i + 1];
+    const c = uniqueOfVertex[i + 2];
+    if (a !== b) { neighborSets[a].add(b); neighborSets[b].add(a); }
+    if (b !== c) { neighborSets[b].add(c); neighborSets[c].add(b); }
+    if (c !== a) { neighborSets[c].add(a); neighborSets[a].add(c); }
+  }
+
+  let neighborTotal = 0;
+  for (const set of neighborSets) neighborTotal += set.size;
+  const neighborStart = new Int32Array(uniqueCount + 1);
+  const neighborList = new Int32Array(neighborTotal);
+  let cursor = 0;
+  for (let u = 0; u < uniqueCount; u++) {
+    neighborStart[u] = cursor;
+    for (const v of neighborSets[u]) neighborList[cursor++] = v;
+  }
+  neighborStart[uniqueCount] = cursor;
+
+  const edgeA = [];
+  const edgeB = [];
+  const edgeRest = [];
+  for (let u = 0; u < uniqueCount; u++) {
+    for (const v of neighborSets[u]) {
+      if (v <= u) continue;
+      const dx = uniqueBase[v * 3] - uniqueBase[u * 3];
+      const dy = uniqueBase[v * 3 + 1] - uniqueBase[u * 3 + 1];
+      const dz = uniqueBase[v * 3 + 2] - uniqueBase[u * 3 + 2];
+      edgeA.push(u);
+      edgeB.push(v);
+      edgeRest.push(Math.sqrt(dx * dx + dy * dy + dz * dz));
+    }
+  }
+
+  return {
+    uniqueCount,
+    uniqueOfVertex,
+    uniqueBase,
+    neighborStart,
+    neighborList,
+    edgeA: new Int32Array(edgeA),
+    edgeB: new Int32Array(edgeB),
+    edgeRest: new Float32Array(edgeRest),
+  };
+}
+
+// Weiche Normalen fuer ein ganzes Mesh. Positionen werden verschweisst,
+// damit bevelte Buchstaben nicht in einzelne Dreiecksflaechen zerfallen.
+function smoothGeometryNormals(geometry) {
+  const position = geometry.attributes.position;
+  const count = position.count;
+  if (!geometry.attributes.normal) {
+    geometry.setAttribute('normal', new THREE.BufferAttribute(new Float32Array(count * 3), 3));
+  }
+  const pos = position.array;
+  const out = geometry.attributes.normal.array;
+  const topo = buildMeshTopology(geometry);
+  const accum = new Float32Array(topo.uniqueCount * 3);
+
+  for (let i = 0; i < count; i += 3) {
+    const ax = pos[i], ay = pos[i + 1], az = pos[i + 2];
+    const bx = pos[i + 3], by = pos[i + 4], bz = pos[i + 5];
+    const cx = pos[i + 6], cy = pos[i + 7], cz = pos[i + 8];
+    const ux = bx - ax, uy = by - ay, uz = bz - az;
+    const vx = cx - ax, vy = cy - ay, vz = cz - az;
+    const nx = uy * vz - uz * vy;
+    const ny = uz * vx - ux * vz;
+    const nz = ux * vy - uy * vx;
+    for (let v = 0; v < 3; v++) {
+      const unique = topo.uniqueOfVertex[i + v] * 3;
+      accum[unique] += nx;
+      accum[unique + 1] += ny;
+      accum[unique + 2] += nz;
+    }
+  }
+
+  for (let u = 0; u < topo.uniqueCount; u++) {
+    const ix = u * 3;
+    const length = Math.hypot(accum[ix], accum[ix + 1], accum[ix + 2]) || 1;
+    accum[ix] /= length;
+    accum[ix + 1] /= length;
+    accum[ix + 2] /= length;
+  }
+
+  for (let i = 0; i < count; i++) {
+    const unique = topo.uniqueOfVertex[i] * 3;
+    const ix = i * 3;
+    out[ix] = accum[unique];
+    out[ix + 1] = accum[unique + 1];
+    out[ix + 2] = accum[unique + 2];
+  }
+  fixDegenerateNormals(out, count);
+  geometry.attributes.normal.needsUpdate = true;
+}
+
+// Ein Normalenvektor der Laenge 0 ist in WebGL eine Falle: normalize(0)
+// liefert NaN, das Lighting schreibt NaN in den HDR-Puffer und der Bloom-
+// Pass verschmiert diese NaN ueber den ganzen Bildschirm (schwarze Frames).
+// Deshalb bekommt jeder degenerierte Normal eine sichere Ersatzrichtung.
+function fixDegenerateNormals(normals, count) {
+  for (let i = 0; i < count; i++) {
+    const ix = i * 3;
+    const x = normals[ix];
+    const y = normals[ix + 1];
+    const z = normals[ix + 2];
+    const length = Math.hypot(x, y, z);
+    if (!Number.isFinite(length) || length < 1e-6) {
+      normals[ix] = 0;
+      normals[ix + 1] = 1;
+      normals[ix + 2] = 0;
+    } else {
+      normals[ix] = x / length;
+      normals[ix + 1] = y / length;
+      normals[ix + 2] = z / length;
+    }
+  }
+}
+
+// ---------------------------------------------------------------------
+//  Echter Mesh-Schnitt
+// ---------------------------------------------------------------------
+//  Statt Dreiecke zu einem Punkt zusammenzuziehen, wird das Mesh an einer
+//  Ebene in zwei geschlossene Haelften geteilt. Jede Schnittkante wird
+//  eingesammelt, zu Ringen verkettet und mit einer Deckflaeche versehen.
+//  Dadurch sieht man nach dem Bruch kein hohles Mesh-Inneres.
+// ---------------------------------------------------------------------
+const SLICE_EPS = 1e-5;
+
+function slicePolygon(poly, distances, keepPositive) {
+  const out = [];
+  const n = poly.length;
+  for (let i = 0; i < n; i++) {
+    const a = poly[i];
+    const b = poly[(i + 1) % n];
+    const da = distances[i];
+    const db = distances[(i + 1) % n];
+    const aInside = keepPositive ? da >= -SLICE_EPS : da <= SLICE_EPS;
+    const bInside = keepPositive ? db >= -SLICE_EPS : db <= SLICE_EPS;
+
+    if (aInside) out.push(a);
+    if (aInside !== bInside) {
+      const t = clamp(da / (da - db || 1e-9), 0, 1);
+      out.push({
+        x: a.x + (b.x - a.x) * t,
+        y: a.y + (b.y - a.y) * t,
+        z: a.z + (b.z - a.z) * t,
+        r: a.r + (b.r - a.r) * t,
+        g: a.g + (b.g - a.g) * t,
+        b: a.b + (b.b - a.b) * t,
+        cut: true,
+      });
+    }
+  }
+
+  // Direkt aufeinanderliegende Punkte entfernen (haelt die Ringverkettung
+  // stabil, wenn ein Vertex exakt auf der Schnittebene liegt).
+  const clean = [];
+  for (const point of out) {
+    const last = clean[clean.length - 1];
+    if (last && Math.hypot(point.x - last.x, point.y - last.y, point.z - last.z) < 1e-7) continue;
+    clean.push(point);
+  }
+  if (clean.length > 1) {
+    const first = clean[0];
+    const last = clean[clean.length - 1];
+    if (Math.hypot(first.x - last.x, first.y - last.y, first.z - last.z) < 1e-7) clean.pop();
+  }
+  return clean;
+}
+
+function appendSlicePolygon(side, poly) {
+  if (poly.length < 3) return;
+  for (let i = 1; i < poly.length - 1; i++) {
+    const a = poly[0];
+    const b = poly[i];
+    const c = poly[i + 1];
+    const ux = b.x - a.x, uy = b.y - a.y, uz = b.z - a.z;
+    const vx = c.x - a.x, vy = c.y - a.y, vz = c.z - a.z;
+    if (Math.hypot(uy * vz - uz * vy, uz * vx - ux * vz, ux * vy - uy * vx) < 1e-10) continue;
+    side.positions.push(a.x, a.y, a.z, b.x, b.y, b.z, c.x, c.y, c.z);
+    side.colors.push(a.r, a.g, a.b, b.r, b.g, b.b, c.r, c.g, c.b);
+  }
+
+  for (let i = 0; i < poly.length; i++) {
+    const a = poly[i];
+    const b = poly[(i + 1) % poly.length];
+    if (!a.cut || !b.cut) continue;
+    if (Math.hypot(b.x - a.x, b.y - a.y, b.z - a.z) < 1e-6) continue;
+    side.segments.push([a, b]);
+  }
+}
+
+function sliceGeometry(geometry, planeNormal, planeConstant) {
+  const position = geometry.attributes.position.array;
+  const color = geometry.attributes.color ? geometry.attributes.color.array : null;
+  const result = {
+    positive: { positions: [], colors: [], segments: [] },
+    negative: { positions: [], colors: [], segments: [] },
+  };
+
+  for (let i = 0; i < position.length; i += 9) {
+    const poly = [];
+    const distances = [];
+    for (let v = 0; v < 3; v++) {
+      const ix = i + v * 3;
+      const point = {
+        x: position[ix],
+        y: position[ix + 1],
+        z: position[ix + 2],
+        r: color ? color[ix] : COLORS.waxCold[0],
+        g: color ? color[ix + 1] : COLORS.waxCold[1],
+        b: color ? color[ix + 2] : COLORS.waxCold[2],
+        cut: false,
+      };
+      const distance = planeNormal.x * point.x + planeNormal.y * point.y +
+        planeNormal.z * point.z - planeConstant;
+      point.cut = Math.abs(distance) < SLICE_EPS;
+      poly.push(point);
+      distances.push(distance);
+    }
+
+    let hasPositive = false;
+    let hasNegative = false;
+    for (const distance of distances) {
+      if (distance > SLICE_EPS) hasPositive = true;
+      if (distance < -SLICE_EPS) hasNegative = true;
+    }
+
+    if (!hasPositive) {
+      appendSlicePolygon(result.negative, poly);
+    } else if (!hasNegative) {
+      appendSlicePolygon(result.positive, poly);
+    } else {
+      appendSlicePolygon(result.positive, slicePolygon(poly, distances, true));
+      appendSlicePolygon(result.negative, slicePolygon(poly, distances, false));
+    }
+  }
+
+  return result;
+}
+
+// Schnittkanten zu Ringen verbinden und jeden Ring mit einem flachen
+// Wax-Deckel schliessen. Die Deckflaeche ist absichtlich etwas dunkler,
+// damit die Bruchstelle als Materialquerschnitt lesbar bleibt.
+function buildSliceCaps(segments, desiredNormal) {
+  const positions = [];
+  const colors = [];
+  if (!segments.length) return { positions, colors };
+
+  const quant = 10000;
+  const keyOf = (point) => `${Math.round(point.x * quant)}|${Math.round(point.y * quant)}|${Math.round(point.z * quant)}`;
+  const adjacency = new Map();
+  for (let i = 0; i < segments.length; i++) {
+    for (const point of segments[i]) {
+      const key = keyOf(point);
+      if (!adjacency.has(key)) adjacency.set(key, []);
+      adjacency.get(key).push(i);
+    }
+  }
+
+  const used = new Uint8Array(segments.length);
+  for (let s = 0; s < segments.length; s++) {
+    if (used[s]) continue;
+    used[s] = 1;
+    const start = segments[s][0];
+    const second = segments[s][1];
+    const loop = [start, second];
+    const startKey = keyOf(start);
+    let endKey = keyOf(second);
+    let guard = 0;
+
+    while (endKey !== startKey && guard++ < segments.length + 2) {
+      const candidates = adjacency.get(endKey);
+      if (!candidates) break;
+      let nextIndex = -1;
+      for (const index of candidates) {
+        if (used[index]) continue;
+        nextIndex = index;
+        break;
+      }
+      if (nextIndex < 0) break;
+      used[nextIndex] = 1;
+      const segment = segments[nextIndex];
+      const next = keyOf(segment[0]) === endKey ? segment[1] : segment[0];
+      loop.push(next);
+      endKey = keyOf(next);
+    }
+
+    if (loop.length < 3) continue;
+
+    let cx = 0, cy = 0, cz = 0;
+    let cr = 0, cg = 0, cb = 0;
+    for (const point of loop) {
+      cx += point.x; cy += point.y; cz += point.z;
+      cr += point.r; cg += point.g; cb += point.b;
+    }
+    const inverse = 1 / loop.length;
+    cx *= inverse; cy *= inverse; cz *= inverse;
+    cr = clamp(cr * inverse * 0.88, 0, 1);
+    cg = clamp(cg * inverse * 0.84, 0, 1);
+    cb = clamp(cb * inverse * 0.76, 0, 1);
+
+    for (let i = 0; i < loop.length; i++) {
+      let a = loop[i];
+      let b = loop[(i + 1) % loop.length];
+      const ux = a.x - cx, uy = a.y - cy, uz = a.z - cz;
+      const vx = b.x - cx, vy = b.y - cy, vz = b.z - cz;
+      let nx = uy * vz - uz * vy;
+      let ny = uz * vx - ux * vz;
+      let nz = ux * vy - uy * vx;
+      if (Math.hypot(nx, ny, nz) < 1e-10) continue;
+      if (nx * desiredNormal.x + ny * desiredNormal.y + nz * desiredNormal.z < 0) {
+        const swap = a;
+        a = b;
+        b = swap;
+      }
+      positions.push(cx, cy, cz, a.x, a.y, a.z, b.x, b.y, b.z);
+      colors.push(cr, cg, cb, a.r, a.g, a.b, b.r, b.g, b.b);
+    }
+  }
+
+  return { positions, colors };
+}
+
+function geometryFromArrays(positions, colors) {
+  if (!positions.length) return null;
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(positions), 3));
+  geometry.setAttribute(
+    'color',
+    new THREE.BufferAttribute(new Float32Array(colors), 3),
+  );
+  geometry.computeVertexNormals();
+  sanitizeGeometryAttributes(geometry);
+  geometry.computeBoundingBox();
+  geometry.computeBoundingSphere();
+  return geometry;
+}
+
+// Nach einem Schnitt koennen durch entartete Dreiecke (Flaeche 0) einzelne
+// Werte unbrauchbar werden. Vor dem Hochladen in die GPU werden sie ersetzt,
+// damit kein NaN/Inf in den HDR-Puffer und damit in den Bloom-Pass gelangt.
+function sanitizeGeometryAttributes(geometry) {
+  const position = geometry.attributes.position;
+  if (position) {
+    const array = position.array;
+    let repaired = 0;
+    for (let i = 0; i < array.length; i++) {
+      if (!Number.isFinite(array[i])) {
+        array[i] = 0;
+        repaired++;
+      }
+    }
+    if (repaired) position.needsUpdate = true;
+  }
+  const color = geometry.attributes.color;
+  if (color) {
+    const array = color.array;
+    let repaired = 0;
+    for (let i = 0; i < array.length; i++) {
+      if (!Number.isFinite(array[i])) {
+        array[i] = 0;
+        repaired++;
+      }
+    }
+    if (repaired) color.needsUpdate = true;
+  }
+  const normal = geometry.attributes.normal;
+  if (normal) fixDegenerateNormals(normal.array, normal.count);
+  if (normal) normal.needsUpdate = true;
+}
+
+function meshVolume(geometry) {
+  const positions = geometry.attributes.position.array;
+  let volume = 0;
+  for (let i = 0; i < positions.length; i += 9) {
+    const ax = positions[i], ay = positions[i + 1], az = positions[i + 2];
+    const bx = positions[i + 3], by = positions[i + 4], bz = positions[i + 5];
+    const cx = positions[i + 6], cy = positions[i + 7], cz = positions[i + 8];
+    volume += ax * (by * cz - bz * cy) +
+      ay * (bz * cx - bx * cz) +
+      az * (bx * cy - by * cx);
+  }
+  return Math.abs(volume) / 6;
+}
+
+class CandlePart {
+  constructor(mesh, geometry, bbox, id) {
+    this.mesh = mesh;
+    this.geometry = geometry;
+    this.id = id;
+    this.breakSide = 1;
+    this.heatWicks = [];
+    this.stress = 0;
+    this.load = 0;
+    this.sagMax = 0;
+    this.cooldown = 0;
+    this.fracture = null;
+    this.originalTemplate = null;
+
+    this.adoptGeometry(geometry, bbox, false);
+    this.fillCold();
+    this.computeSmoothNormals();
+    this.originalTemplate = geometry.clone();
+  }
+
+  // Uebernimmt eine Geometrie (initial, nach einem Schnitt oder beim Reset)
+  // und baut alle Simulationsdaten neu auf. Die aktuellen Positionen werden
+  // dabei zur neuen Ruhelage; bereits geschmolzene Form bleibt also erhalten.
+  adoptGeometry(geometry, bbox = null, disposeOld = false) {
+    if (disposeOld && this.geometry && this.geometry !== geometry) {
+      this.geometry.dispose();
+    }
+
+    this.geometry = geometry;
+    this.mesh.geometry = geometry;
+    this.count = geometry.attributes.position.count;
+
+    if (!geometry.attributes.color) {
+      const colors = new Float32Array(this.count * 3);
+      geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+    }
+    if (!geometry.attributes.normal) geometry.computeVertexNormals();
+    geometry.attributes.position.setUsage(THREE.DynamicDrawUsage);
+    geometry.attributes.normal.setUsage(THREE.DynamicDrawUsage);
+    geometry.attributes.color.setUsage(THREE.DynamicDrawUsage);
+    if (!bbox) {
+      geometry.computeBoundingBox();
+      bbox = geometry.boundingBox;
+    }
+    this.bbox = bbox.clone();
+
+    const topology = buildMeshTopology(geometry);
+    this.uniqueCount = topology.uniqueCount;
+    this.uniqueOfVertex = topology.uniqueOfVertex;
+    this.uniqueBase = topology.uniqueBase;
+    this.uniquePos = new Float32Array(topology.uniqueBase);
+    this.neighborStart = topology.neighborStart;
+    this.neighborList = topology.neighborList;
+    this.edgeA = topology.edgeA;
+    this.edgeB = topology.edgeB;
+    this.edgeRest = topology.edgeRest;
+
+    this.uniqueTemps = new Float32Array(this.uniqueCount);
+    this.uniqueSag = new Float32Array(this.uniqueCount);
+    this.uniqueNormals = new Float32Array(this.uniqueCount * 3);
+    this.uniqueColors = new Float32Array(this.uniqueCount * 3);
+    this.tempScratch = new Float32Array(this.uniqueCount);
+    this.sagScratch = new Float32Array(this.uniqueCount);
+
+    const sourceColors = geometry.attributes.color.array;
+    const seen = new Uint8Array(this.uniqueCount);
+    for (let i = 0; i < this.count; i++) {
+      const unique = this.uniqueOfVertex[i];
+      if (seen[unique]) continue;
+      seen[unique] = 1;
+      this.uniqueColors[unique * 3] = sourceColors[i * 3];
+      this.uniqueColors[unique * 3 + 1] = sourceColors[i * 3 + 1];
+      this.uniqueColors[unique * 3 + 2] = sourceColors[i * 3 + 2];
+    }
+
+    this.rimCandidates = this.findRimCandidates();
+    this.breakThreshold = CONFIG.shards.stressBase +
+      (this.bbox.max.x - this.bbox.min.x) * CONFIG.shards.stressWidth;
+    this.stress = 0;
+    this.load = 0;
+    this.sagMax = 0;
+    this.cooldown = 0;
+    this.fracture = null;
+    this.computeSmoothNormals();
+  }
+
+  fillCold() {
+    for (let i = 0; i < this.uniqueCount; i++) {
+      this.uniqueColors[i * 3 + 0] = COLORS.waxCold[0];
+      this.uniqueColors[i * 3 + 1] = COLORS.waxCold[1];
+      this.uniqueColors[i * 3 + 2] = COLORS.waxCold[2];
+    }
+    this.scatterColors();
+  }
+
+  scatterColors() {
+    const colors = this.geometry.attributes.color.array;
+    for (let i = 0; i < this.count; i++) {
+      const unique = this.uniqueOfVertex[i] * 3;
+      const ix = i * 3;
+      colors[ix] = this.uniqueColors[unique];
+      colors[ix + 1] = this.uniqueColors[unique + 1];
+      colors[ix + 2] = this.uniqueColors[unique + 2];
+    }
+    this.geometry.attributes.color.needsUpdate = true;
+  }
+
+  scatterPositions() {
+    const positions = this.geometry.attributes.position.array;
+    for (let i = 0; i < this.count; i++) {
+      const unique = this.uniqueOfVertex[i] * 3;
+      const ix = i * 3;
+      positions[ix] = this.uniquePos[unique];
+      positions[ix + 1] = this.uniquePos[unique + 1];
+      positions[ix + 2] = this.uniquePos[unique + 2];
+    }
+    this.geometry.attributes.position.needsUpdate = true;
+  }
+
+  // Weiche Normalen aus den aktuellen Positionen. Weil die Topologie die
+  // Kopien eines Punktes kennt, wird ueber Dreiecksgrenzen gemittelt.
+  computeSmoothNormals() {
+    if (!this.geometry.attributes.normal) {
+      this.geometry.setAttribute(
+        'normal',
+        new THREE.BufferAttribute(new Float32Array(this.count * 3), 3),
+      );
+    }
+    const positions = this.geometry.attributes.position.array;
+    const normals = this.geometry.attributes.normal.array;
+    const accum = new Float32Array(this.uniqueCount * 3);
+
+    for (let i = 0; i < this.count; i += 3) {
+      const ax = positions[i], ay = positions[i + 1], az = positions[i + 2];
+      const bx = positions[i + 3], by = positions[i + 4], bz = positions[i + 5];
+      const cx = positions[i + 6], cy = positions[i + 7], cz = positions[i + 8];
+      const ux = bx - ax, uy = by - ay, uz = bz - az;
+      const vx = cx - ax, vy = cy - ay, vz = cz - az;
+      const nx = uy * vz - uz * vy;
+      const ny = uz * vx - ux * vz;
+      const nz = ux * vy - uy * vx;
+      for (let v = 0; v < 3; v++) {
+        const unique = this.uniqueOfVertex[i + v] * 3;
+        accum[unique] += nx;
+        accum[unique + 1] += ny;
+        accum[unique + 2] += nz;
+      }
+    }
+
+    for (let u = 0; u < this.uniqueCount; u++) {
+      const ix = u * 3;
+      const length = Math.hypot(accum[ix], accum[ix + 1], accum[ix + 2]) || 1;
+      accum[ix] /= length;
+      accum[ix + 1] /= length;
+      accum[ix + 2] /= length;
+    }
+
+    this.uniqueNormals.set(accum);
+    for (let i = 0; i < this.count; i++) {
+      const unique = this.uniqueOfVertex[i] * 3;
+      const ix = i * 3;
+      normals[ix] = accum[unique];
+      normals[ix + 1] = accum[unique + 1];
+      normals[ix + 2] = accum[unique + 2];
+    }
+    fixDegenerateNormals(normals, this.count);
+    this.geometry.attributes.normal.needsUpdate = true;
+  }
+
+  // Kandidaten am oberen Rand: dort entstehen Tropfen und spaeter der Bruch.
+  // Rueckgabe sind logische (verschweisste) Vertex-Indizes.
+  findRimCandidates() {
+    const positions = this.uniqueBase;
+    const centerX = (this.bbox.min.x + this.bbox.max.x) / 2;
+    const centerZ = (this.bbox.min.z + this.bbox.max.z) / 2;
+    const halfX = Math.max(0.001, (this.bbox.max.x - this.bbox.min.x) / 2);
+    const halfZ = Math.max(0.001, (this.bbox.max.z - this.bbox.min.z) / 2);
+    const height = this.bbox.max.y - this.bbox.min.y;
+    const band = Math.max(0.02, height * 0.24);
+    const candidates = [];
+
+    for (let u = 0; u < this.uniqueCount; u++) {
+      const ix = u * 3;
+      const x = positions[ix];
+      const y = positions[ix + 1];
+      const z = positions[ix + 2];
+      if (y < this.bbox.max.y - band) continue;
+      const edge = Math.max(
+        Math.abs(x - centerX) / halfX,
+        Math.abs(z - centerZ) / halfZ,
+      );
+      if (edge > 0.5) candidates.push(u);
+    }
+    return candidates.length ? candidates : [0];
+  }
+
+  // Aktuelle Oberflaechenhoehe nahe einer horizontalen Position. Der Docht
+  // benutzt das, um mit dem schmelzenden Wachs nach unten zu wandern, statt
+  // ueber der abgesackten Oberflaeche zu schweben.
+  surfaceHeightNear(x, z) {
+    const base = this.uniqueBase;
+    const pos = this.uniquePos;
+    const radiusSq = 0.09;
+    let highest = -Infinity;
+    let nearest = 0;
+    let nearestSq = Infinity;
+    for (let u = 0; u < this.uniqueCount; u++) {
+      const ix = u * 3;
+      const dx = base[ix] - x;
+      const dz = base[ix + 2] - z;
+      const d2 = dx * dx + dz * dz;
+      if (d2 < nearestSq) {
+        nearestSq = d2;
+        nearest = pos[ix + 1];
+      }
+      if (d2 <= radiusSq && pos[ix + 1] > highest) highest = pos[ix + 1];
+    }
+    return highest > -Infinity ? highest : nearest;
+  }
+
+  update(dt) {
+    const count = this.uniqueCount;
+    if (!count) return;
+
+    const positions = this.uniquePos;
+    const base = this.uniqueBase;
+    const normals = this.uniqueNormals;
+    const temps = this.uniqueTemps;
+    const sag = this.uniqueSag;
+    const wicks = this.heatWicks.length ? this.heatWicks : state.wicks;
+    const coreSq = CONFIG.heat.radius * CONFIG.heat.radius;
+    const haloSq = CONFIG.heat.haloRadius * CONFIG.heat.haloRadius;
+    const midY = (this.bbox.min.y + this.bbox.max.y) * 0.5;
+    const bridgeHeat = CONFIG.shards.bridgeHeat;
+    let hotCount = 0;
+    let topMass = 0;
+
+    // 1) Waerme: Kern um die Flamme + breiter Halo. Der Halo ist der
+    //    Grund, warum nicht nur ein kleiner Punkt unter dem Docht schmilzt.
+    for (let u = 0; u < count; u++) {
+      const ix = u * 3;
+      const bx = base[ix];
+      const by = base[ix + 1];
+      const bz = base[ix + 2];
+      let core = 0;
+      let halo = 0;
+
+      for (const wick of wicks) {
+        if (!wick.active) continue;
+        const dx = bx - wick.localHeat.x;
+        const dy = by - wick.localHeat.y;
+        const dz = bz - wick.localHeat.z;
+        const d2 = dx * dx + dy * dy + dz * dz;
+        if (d2 < coreSq) {
+          const value = 1 - d2 / coreSq;
+          if (value > core) core = value;
+        }
+        if (d2 < haloSq) {
+          const value = 1 - d2 / haloSq;
+          if (value > halo) halo = value;
+        }
+      }
+
+      const target = Math.max(core * core, halo * halo * CONFIG.heat.haloStrength);
+      let temp = temps[u];
+      if (target > temp) temp += (target - temp) * CONFIG.heat.heatRate * dt;
+      else temp -= temp * CONFIG.heat.coolRate * dt;
+      temps[u] = clamp(temp, 0, 1);
+    }
+
+    // 2) Waermeleitung entlang der Mesh-Kanten. Hitze kriecht dadurch
+    //    in die Nachbarschaft, auch ohne direkten Flammenabstand.
+    this.tempScratch.set(temps);
+    const diffusion = Math.min(0.55, CONFIG.heat.diffusion * dt);
+    for (let u = 0; u < count; u++) {
+      const start = this.neighborStart[u];
+      const end = this.neighborStart[u + 1];
+      if (end <= start) continue;
+      let sum = 0;
+      for (let n = start; n < end; n++) sum += this.tempScratch[this.neighborList[n]];
+      const average = sum / (end - start);
+      temps[u] = clamp(temps[u] + (average - temps[u]) * diffusion, 0, 1);
+    }
+
+    // 3) Schwerkraft und Farbe. Heisse Vertices werden schneller nach
+    //    unten gezogen; die Nachbarschaft folgt ueber die Glaettung.
+    for (let u = 0; u < count; u++) {
+      const ix = u * 3;
+      const temp = temps[u];
+      if (temp > 0.56) hotCount++;
+
+      const melt = smoothstep(CONFIG.heat.meltThreshold, 1, temp);
+      const gravityBias = 0.62 + temp * 1.05;
+      sag[u] = Math.min(
+        CONFIG.heat.maxSag,
+        sag[u] + melt * CONFIG.heat.sagRate * gravityBias * dt,
+      );
+      if (sag[u] > this.sagMax) this.sagMax = sag[u];
+
+      if (base[ix + 1] > midY && temp > bridgeHeat) {
+        topMass += temp - bridgeHeat;
+      }
+
+      const warmMix = smoothstep(0.07, 0.56, temp);
+      const hotMix = smoothstep(0.56, 0.98, temp);
+      const r = lerp(lerp(COLORS.waxCold[0], COLORS.waxWarm[0], warmMix), COLORS.waxHot[0], hotMix);
+      const g = lerp(lerp(COLORS.waxCold[1], COLORS.waxWarm[1], warmMix), COLORS.waxHot[1], hotMix);
+      const b = lerp(lerp(COLORS.waxCold[2], COLORS.waxWarm[2], warmMix), COLORS.waxHot[2], hotMix);
+      this.uniqueColors[ix] = r;
+      this.uniqueColors[ix + 1] = g;
+      this.uniqueColors[ix + 2] = b;
+    }
+
+    // 4) Schmelzweg glaetten: Ein heisser Vertex zieht seine Nachbarn
+    //    mit nach unten, statt einen einzelnen Stachel zu bilden.
+    this.sagScratch.set(sag);
+    const sagSpread = Math.min(0.4, CONFIG.heat.flow * dt);
+    for (let u = 0; u < count; u++) {
+      const heat = temps[u];
+      if (heat < 0.18) continue;
+      const start = this.neighborStart[u];
+      const end = this.neighborStart[u + 1];
+      if (end <= start) continue;
+      let sum = 0;
+      for (let n = start; n < end; n++) sum += this.sagScratch[this.neighborList[n]];
+      const average = sum / (end - start);
+      if (average > sag[u]) {
+        sag[u] += (average - sag[u]) * sagSpread * smoothstep(0.18, 0.8, heat);
+      }
+    }
+
+    // 5) Position aus Ruhelage + Schmelzweg + seitlicher Normale.
+    for (let u = 0; u < count; u++) {
+      const ix = u * 3;
+      const drop = sag[u];
+      positions[ix] = base[ix] + normals[ix] * drop * CONFIG.heat.normalFlow;
+      positions[ix + 1] = Math.max(0.003, base[ix + 1] - drop);
+      positions[ix + 2] = base[ix + 2] + normals[ix + 2] * drop * CONFIG.heat.normalFlow;
+    }
+
+    // 6) Necking: kurz vor dem Bruch zieht sich der Steg zusammen.
+    //    Der Lappen haengt dann sichtbar an einer duennen Stelle.
+    if (this.fracture) {
+      const stressRatio = clamp(this.stress / Math.max(0.0001, this.breakThreshold), 0, 1);
+      if (stressRatio > CONFIG.heat.neckStart) {
+        const strength = smoothstep(CONFIG.heat.neckStart, 1, stressRatio) *
+          CONFIG.heat.neckAmount;
+        const plane = this.fracture;
+        const band = 0.16;
+        for (let u = 0; u < count; u++) {
+          const ix = u * 3;
+          const distance = plane.n.x * positions[ix] +
+            plane.n.y * positions[ix + 1] +
+            plane.n.z * positions[ix + 2] - plane.c;
+          const falloff = Math.exp(-(distance * distance) / (band * band));
+          const pinch = strength * falloff;
+          if (pinch < 0.0005) continue;
+          const scale = 1 - pinch;
+          positions[ix] = plane.centerX + (positions[ix] - plane.centerX) * scale;
+          positions[ix + 2] = plane.centerZ + (positions[ix + 2] - plane.centerZ) * scale;
+        }
+      }
+    }
+
+    // 7) Fluid-Relaxation: heisse Bereiche gleiten leicht uebereinander.
+    //    Das nimmt den harten "Lego"-Eindruck aus der Oberflaeche.
+    const flow = Math.min(0.12, CONFIG.heat.flow * dt);
+    for (let u = 0; u < count; u++) {
+      const weight = smoothstep(0.3, 0.9, temps[u]);
+      if (weight <= 0) continue;
+      const start = this.neighborStart[u];
+      const end = this.neighborStart[u + 1];
+      if (end <= start) continue;
+      let sx = 0, sy = 0, sz = 0;
+      for (let n = start; n < end; n++) {
+        const v = this.neighborList[n] * 3;
+        sx += positions[v];
+        sy += positions[v + 1];
+        sz += positions[v + 2];
+      }
+      const inverse = 1 / (end - start);
+      const k = flow * weight;
+      const ix = u * 3;
+      positions[ix] = lerp(positions[ix], sx * inverse, k);
+      positions[ix + 1] = lerp(positions[ix + 1], sy * inverse, k);
+      positions[ix + 2] = lerp(positions[ix + 2], sz * inverse, k);
+    }
+
+    // 8) Abstandserhaltung: zu nah gekommene heisse Vertices stossen
+    //    sich ab. So bleibt das Volumen sichtbar und der Mesh kollabiert
+    //    nicht in eine duenne Flaeche.
+    for (let pass = 0; pass < 2; pass++) {
+      for (let e = 0; e < this.edgeA.length; e++) {
+        const a = this.edgeA[e];
+        const b = this.edgeB[e];
+        const heat = (temps[a] + temps[b]) * 0.5;
+        if (heat < 0.28) continue;
+        const weight = smoothstep(0.28, 0.9, heat);
+        const minDistance = Math.min(
+          this.edgeRest[e] * 0.72,
+          CONFIG.heat.minSpacing,
+        );
+        if (minDistance <= 1e-5) continue;
+
+        const ia = a * 3;
+        const ib = b * 3;
+        let dx = positions[ib] - positions[ia];
+        let dy = positions[ib + 1] - positions[ia + 1];
+        let dz = positions[ib + 2] - positions[ia + 2];
+        const distanceSq = dx * dx + dy * dy + dz * dz;
+        if (distanceSq >= minDistance * minDistance) continue;
+
+        const distance = Math.sqrt(Math.max(1e-12, distanceSq));
+        const inverse = 1 / distance;
+        if (distanceSq < 1e-12) {
+          dx = 1;
+          dy = 0;
+          dz = 0;
+        } else {
+          dx *= inverse;
+          dy *= inverse;
+          dz *= inverse;
+        }
+        const push = (minDistance - distance) * weight *
+          CONFIG.heat.repulsion * 0.5;
+        positions[ia] -= dx * push;
+        positions[ia + 1] -= dy * push * 0.55;
+        positions[ia + 2] -= dz * push;
+        positions[ib] += dx * push;
+        positions[ib + 1] += dy * push * 0.55;
+        positions[ib + 2] += dz * push;
+      }
+    }
+
+    // Der Tisch bleibt eine harte Untergrenze, auch nach der Relaxation.
+    for (let u = 0; u < count; u++) {
+      const iy = u * 3 + 1;
+      if (positions[iy] < 0.003) positions[iy] = 0.003;
+    }
+
+    this.scatterPositions();
+    this.scatterColors();
+
+    // Weiche Normalen nur alle drei Frames; die Bewegung ist langsam
+    // genug, dass dazwischen nichts hart wirkt.
+    if (state.normalFrame % 3 === 0) this.computeSmoothNormals();
+
+    // 9) Gewicht und Bruch. Nicht die reine Zeit, sondern die heisse
+    //    Masse oberhalb der Mitte belastet den kleinen Steg.
+    const wick = this.heatWicks[0];
+    const burning = wick && wick.burn > 0.012;
+    const load = topMass / count;
+    this.load += (load - this.load) * Math.min(1, dt * 3);
+    if (burning) {
+      const hotFraction = hotCount / count;
+      this.stress += (this.load * 6.4 + hotFraction * 0.65) * dt;
+    }
+    this.cooldown = Math.max(0, this.cooldown - dt);
+    if (!this.fracture && this.stress > this.breakThreshold * CONFIG.heat.neckStart) {
+      this.chooseFracturePlane();
+    }
+  }
+
+  // Die Bruchebene wird einseitig schraeg gelegt. Dadurch bricht ein
+  // Randstueck ab und nicht die komplette Buchstabenoberseite.
+  chooseFracturePlane() {
+    const count = this.uniqueCount;
+    if (!count) return null;
+    const side = this.breakSide;
+    this.breakSide *= -1;
+
+    const normal = new THREE.Vector3(0.55 * side, 1.0, rand(-0.22, 0.22)).normalize();
+    const distances = new Float32Array(count);
+    const centerX = (this.bbox.min.x + this.bbox.max.x) * 0.5;
+    const centerY = (this.bbox.min.y + this.bbox.max.y) * 0.5;
+    const centerZ = (this.bbox.min.z + this.bbox.max.z) * 0.5;
+
+    for (let u = 0; u < count; u++) {
+      const ix = u * 3;
+      distances[u] = normal.x * this.uniquePos[ix] +
+        normal.y * this.uniquePos[ix + 1] +
+        normal.z * this.uniquePos[ix + 2];
+    }
+
+    const sorted = Array.from(distances).sort((a, b) => a - b);
+    const target = clamp(
+      0.14,
+      CONFIG.shards.minChunkRatio + 0.02,
+      CONFIG.shards.maxChunkRatio - 0.04,
+    );
+    let constant = sorted[Math.floor(sorted.length * (1 - target))];
+
+    // Der positive Teil muss oben liegen; sonst lieber etwas höher
+    // schneiden. Das verhindert einen Schnitt quer durch den Buchstabenfuss.
+    const centerDistance = normal.x * centerX + normal.y * centerY + normal.z * centerZ;
+    if (constant < centerDistance) constant = centerDistance + 0.04;
+
+    let sx = 0;
+    let sz = 0;
+    let samples = 0;
+    for (let u = 0; u < count; u++) {
+      if (Math.abs(distances[u] - constant) > 0.16) continue;
+      const ix = u * 3;
+      sx += this.uniquePos[ix];
+      sz += this.uniquePos[ix + 2];
+      samples++;
+    }
+    if (samples === 0) {
+      sx = centerX;
+      sz = centerZ;
+      samples = 1;
+    }
+
+    this.fracture = {
+      n: normal,
+      c: constant,
+      centerX: sx / samples,
+      centerZ: sz / samples,
+    };
+    return this.fracture;
+  }
+
+  canBreak() {
+    if (this.cooldown > 0) return false;
+    if (this.stress < this.breakThreshold) return false;
+    if (this.sagMax < 0.04) return false;
+    const wick = this.heatWicks[0];
+    return Boolean(wick && wick.burn > 0.018);
+  }
+
+  // Vor dem eigentlichen Schnitt wird die Ebene an die inzwischen weiter
+  // abgesackte Geometrie angepasst. Sonst kann der positive Teil durch das
+  // Nachrutschen zu klein werden und der Bruch wuerde endlos verworfen.
+  refineFractureConstant(plane) {
+    const count = this.uniqueCount;
+    if (!count) return;
+    const distances = new Float32Array(count);
+    for (let u = 0; u < count; u++) {
+      const ix = u * 3;
+      distances[u] = plane.n.x * this.uniquePos[ix] +
+        plane.n.y * this.uniquePos[ix + 1] +
+        plane.n.z * this.uniquePos[ix + 2];
+    }
+    const sorted = Array.from(distances).sort((a, b) => a - b);
+    const target = clamp(
+      0.15,
+      CONFIG.shards.minChunkRatio + 0.05,
+      CONFIG.shards.maxChunkRatio - 0.04,
+    );
+    plane.c = sorted[Math.floor(sorted.length * (1 - target))];
+
+    let sx = 0;
+    let sz = 0;
+    let samples = 0;
+    for (let u = 0; u < count; u++) {
+      if (Math.abs(distances[u] - plane.c) > 0.16) continue;
+      const ix = u * 3;
+      sx += this.uniquePos[ix];
+      sz += this.uniquePos[ix + 2];
+      samples++;
+    }
+    if (samples > 0) {
+      plane.centerX = sx / samples;
+      plane.centerZ = sz / samples;
+    }
+  }
+
+  // Echter Schnitt: Das Mesh wird in zwei geschlossene Teile geteilt.
+  // Beide erhalten eine Deckflaeche; der abgetrennte Teil wird zum Shard.
+  split() {
+    if (!this.fracture) this.chooseFracturePlane();
+    const plane = this.fracture;
+    if (!plane) return null;
+    this.refineFractureConstant(plane);
+
+    const sliced = sliceGeometry(this.geometry, plane.n, plane.c);
+    const positiveTriangles = sliced.positive.positions.length / 9;
+    const negativeTriangles = sliced.negative.positions.length / 9;
+    const totalTriangles = positiveTriangles + negativeTriangles;
+    const ratio = totalTriangles > 0 ? positiveTriangles / totalTriangles : 0;
+
+    if (
+      positiveTriangles < 3 ||
+      negativeTriangles < 4 ||
+      ratio < CONFIG.shards.minChunkRatio ||
+      ratio > CONFIG.shards.maxChunkRatio
+    ) {
+      this.cooldown = 1.2;
+      this.stress *= 0.82;
+      return null;
+    }
+
+    const positiveCap = buildSliceCaps(
+      sliced.positive.segments,
+      plane.n.clone().negate(),
+    );
+    const negativeCap = buildSliceCaps(sliced.negative.segments, plane.n);
+
+    const mainGeometry = geometryFromArrays(
+      sliced.negative.positions.concat(negativeCap.positions),
+      sliced.negative.colors.concat(negativeCap.colors),
+    );
+    const chunkGeometry = geometryFromArrays(
+      sliced.positive.positions.concat(positiveCap.positions),
+      sliced.positive.colors.concat(positiveCap.colors),
+    );
+    if (!mainGeometry || !chunkGeometry) return null;
+
+    this.mesh.updateMatrixWorld(true);
+    chunkGeometry.computeBoundingBox();
+    const center = chunkGeometry.boundingBox.getCenter(new THREE.Vector3());
+    chunkGeometry.translate(-center.x, -center.y, -center.z);
+    chunkGeometry.computeBoundingBox();
+    chunkGeometry.computeBoundingSphere();
+    smoothGeometryNormals(chunkGeometry);
+    const volume = Math.max(1e-5, meshVolume(chunkGeometry));
+
+    // Die aktuelle, bereits geschmolzene Form wird zur neuen Ruhelage
+    // des Hauptteils. Frueher geschmolzenes Wachs springt nicht zurueck.
+    this.adoptGeometry(mainGeometry, mainGeometry.boundingBox, true);
+    this.computeSmoothNormals();
+    this.reanchorWicks();
+
+    this.cooldown = CONFIG.shards.cooldown;
+    this.stress = 0;
+    this.load = 0;
+    this.sagMax = 0;
+    this.fracture = null;
+
+    const worldCenter = this.mesh.localToWorld(center.clone());
+    return {
+      geometry: chunkGeometry,
+      center: worldCenter,
+      radius: chunkGeometry.boundingSphere.radius,
+      volume,
+    };
+  }
+
+  // Nach einem Bruch sitzt der Docht auf der neuen, niedrigeren Oberflaeche.
+  findTopAnchors(wanted) {
+    const base = this.uniqueBase;
+    const height = this.bbox.max.y - this.bbox.min.y;
+    const band = Math.max(0.02, height * 0.11);
+    const candidates = [];
+    for (let u = 0; u < this.uniqueCount; u++) {
+      if (base[u * 3 + 1] >= this.bbox.max.y - band) candidates.push(u);
+    }
+    if (!candidates.length) {
+      return [new THREE.Vector3(
+        (this.bbox.min.x + this.bbox.max.x) * 0.5,
+        this.bbox.max.y,
+        (this.bbox.min.z + this.bbox.max.z) * 0.5,
+      )];
+    }
+
+    if (wanted === 1) {
+      const previous = this.heatWicks[0] ? this.heatWicks[0].localBase : null;
+      let best = candidates[0];
+      let bestScore = Infinity;
+      for (const u of candidates) {
+        const ix = u * 3;
+        const dx = previous ? base[ix] - previous.x : 0;
+        const dz = previous ? base[ix + 2] - previous.z : 0;
+        const score = (this.bbox.max.y - base[ix + 1]) * 1.4 + dx * dx + dz * dz;
+        if (score < bestScore) {
+          bestScore = score;
+          best = u;
+        }
+      }
+      return [new THREE.Vector3(base[best * 3], base[best * 3 + 1], base[best * 3 + 2])];
+    }
+
+    const anchors = [];
+    for (let zone = 0; zone < wanted; zone++) {
+      const minX = this.bbox.min.x + (this.bbox.max.x - this.bbox.min.x) * zone / wanted;
+      const maxX = this.bbox.min.x + (this.bbox.max.x - this.bbox.min.x) * (zone + 1) / wanted;
+      const zoneCenter = (minX + maxX) * 0.5;
+      let best = null;
+      let bestScore = Infinity;
+      for (const u of candidates) {
+        const ix = u * 3;
+        const inZone = base[ix] >= minX && base[ix] <= maxX;
+        const score = (inZone ? 0 : 4) + Math.abs(base[ix] - zoneCenter) +
+          (this.bbox.max.y - base[ix + 1]) * 2;
+        if (score < bestScore) {
+          bestScore = score;
+          best = u;
+        }
+      }
+      if (best === null) best = candidates[0];
+      anchors.push(new THREE.Vector3(base[best * 3], base[best * 3 + 1], base[best * 3 + 2]));
+    }
+    return anchors;
+  }
+
+  reanchorWicks() {
+    if (!this.heatWicks.length) return;
+    const anchors = this.findTopAnchors(this.heatWicks.length);
+    this.heatWicks.forEach((wick, index) => {
+      wick.setAnchor(anchors[index] || anchors[0]);
+    });
+  }
+
+  reset() {
+    if (this.originalTemplate) {
+      const template = this.originalTemplate.clone();
+      template.computeBoundingBox();
+      this.adoptGeometry(template, template.boundingBox, true);
+    }
+    this.fillCold();
+    this.computeSmoothNormals();
+    this.reanchorWicks();
+    this.stress = 0;
+    this.load = 0;
+    this.sagMax = 0;
+    this.cooldown = 0;
+    this.breakSide = 1;
+    this.fracture = null;
+  }
+}
+
+// =====================================================================
+//  6. DOCHT UND FLAMME
+// =====================================================================
+
+const wickGeometry = new THREE.CylinderGeometry(
+  CONFIG.wick.radius,
+  CONFIG.wick.radius * 1.45,
+  1,
+  6,
+  1,
+  false,
+);
+
+class Wick {
+  constructor(part, anchor, index) {
+    this.part = part;
+    this.index = index;
+    this.localBase = anchor.clone();
+    this.height = CONFIG.wick.height;
+    this.burn = 0;
+    this.lit = 0;
+    this.active = false;
+    this.ignitionDelay = 0.35 + index * CONFIG.wick.igniteGap;
+    this.seed = Math.random() * 1000;
+
+    // localHeat liegt im Koordinatensystem des Buchstaben-Meshes.
+    this.localHeat = new THREE.Vector3(anchor.x, anchor.y, anchor.z);
+    this.surfaceY = anchor.y;
+    this.worldBase = new THREE.Vector3(
+      part.mesh.position.x + anchor.x,
+      CONFIG.tableY + anchor.y,
+      part.mesh.position.z + anchor.z,
+    );
+    this.tipWorld = new THREE.Vector3().copy(this.worldBase);
+
+    this.mesh = new THREE.Mesh(wickGeometry, materials.wick);
+    this.mesh.castShadow = true;
+    this.mesh.receiveShadow = true;
+    scene.add(this.mesh);
+
+    this.flame = new THREE.Group();
+    this.flame.visible = false;
+    scene.add(this.flame);
+
+    const outer = new THREE.Sprite(materials.flameOuter);
+    outer.scale.set(0.5, 0.62, 1);
+    outer.position.y = 0.13;
+    this.flame.add(outer);
+
+    const blue = new THREE.Sprite(materials.flameBlue);
+    blue.scale.set(0.105, 0.09, 1);
+    blue.position.y = 0.02;
+    this.flame.add(blue);
+
+    const main = new THREE.Sprite(materials.flameMain);
+    main.scale.set(0.17, 0.42, 1);
+    main.position.y = 0.15;
+    this.flame.add(main);
+
+    const core = new THREE.Sprite(materials.flameCore);
+    core.scale.set(0.075, 0.21, 1);
+    core.position.y = 0.115;
+    this.flame.add(core);
+
+    this.light = null;
+    if (index % CONFIG.wick.lightEvery === 0) {
+      this.light = new THREE.PointLight(0xff9b4e, 0, 4.2, 2.0);
+      this.light.castShadow = false;
+      scene.add(this.light);
+    }
+
+    this.reset();
+  }
+
+  update(dt, time, elapsed) {
+    this.lit = smoothstep(
+      this.ignitionDelay,
+      this.ignitionDelay + CONFIG.wick.igniteDuration,
+      elapsed,
+    );
+    this.active = this.lit > 0.04;
+
+    if (this.active) {
+      this.burn = Math.min(
+        this.height * 0.92,
+        this.burn + CONFIG.wick.burnSpeed * dt,
+      );
+    }
+
+    const remaining = Math.max(0.012, this.height - this.burn);
+    // Flamme folgt der abgesackten Wachsoberflaeche.
+    this.followSurface();
+    this.localHeat.set(
+      this.localBase.x,
+      this.surfaceY + remaining,
+      this.localBase.z,
+    );
+    this.tipWorld.set(
+      this.worldBase.x,
+      this.worldBase.y + remaining,
+      this.worldBase.z,
+    );
+
+    // Der Docht wird kuerzer; die Flamme wandert mit nach unten.
+    const wickScale = remaining / this.height;
+    this.mesh.scale.set(1, wickScale, 1);
+    this.mesh.position.set(
+      this.worldBase.x,
+      this.worldBase.y + remaining * 0.5,
+      this.worldBase.z,
+    );
+
+    // Flackern aus drei Sinuswellen: langsame Unruhe + schnelle Zuckung.
+    const flicker = 0.88 +
+      Math.sin(time * 12.7 + this.seed) * 0.075 +
+      Math.sin(time * 27.3 + this.seed * 1.7) * 0.045 +
+      Math.sin(time * 6.1 + this.seed * 0.37) * 0.035;
+
+    const sway = state.wind.x * CONFIG.wind.flameSway +
+      Math.sin(time * 2.3 + this.seed) * 0.006;
+    const swayZ = state.wind.z * CONFIG.wind.flameSway +
+      Math.cos(time * 1.9 + this.seed) * 0.004;
+
+    this.flame.position.set(
+      this.tipWorld.x + sway,
+      this.tipWorld.y,
+      this.tipWorld.z + swayZ,
+    );
+    const flameScale = this.lit * flicker;
+    this.flame.scale.setScalar(flameScale);
+    this.flame.visible = this.lit > 0.01;
+
+    if (this.light) {
+      this.light.position.set(
+        this.tipWorld.x + sway * 1.6,
+        this.tipWorld.y + 0.11,
+        this.tipWorld.z + swayZ * 1.6,
+      );
+      this.light.intensity = this.lit * (5.5 + flicker * 3.5);
+    }
+  }
+
+  // Nach einem Bruch wandert der Docht auf die neue, tiefere Oberflaeche.
+  // localBase/worldBase werden nachgezogen; die restliche Flamme folgt
+  // beim naechsten update() automatisch.
+  setAnchor(anchor) {
+    this.localBase.copy(anchor);
+    this.surfaceY = anchor.y;
+    this.worldBase.set(
+      this.part.mesh.position.x + anchor.x,
+      CONFIG.tableY + anchor.y,
+      this.part.mesh.position.z + anchor.z,
+    );
+    this.localHeat.set(this.localBase.x, this.surfaceY + this.height, this.localBase.z);
+    this.tipWorld.set(this.worldBase.x, this.worldBase.y + this.height, this.worldBase.z);
+  }
+
+  // Liest die aktuelle Hoehe des Wachses unter dem Docht. Waehrend des
+  // Schmelzens sinkt die Flamme mit der Oberflaeche ab.
+  followSurface() {
+    const part = this.part;
+    if (!part || !part.uniquePos) return;
+    const y = part.surfaceHeightNear(this.localBase.x, this.localBase.z);
+    if (Number.isFinite(y)) this.surfaceY = Math.max(0.015, y);
+    this.worldBase.set(
+      part.mesh.position.x + this.localBase.x,
+      CONFIG.tableY + this.surfaceY,
+      part.mesh.position.z + this.localBase.z,
+    );
+  }
+
+  reset() {
+    this.burn = 0;
+    this.lit = 0;
+    this.active = false;
+    const remaining = this.height;
+    this.surfaceY = this.localBase.y;
+    this.localHeat.set(this.localBase.x, this.surfaceY + remaining, this.localBase.z);
+    this.tipWorld.set(this.worldBase.x, this.worldBase.y + remaining, this.worldBase.z);
+    this.mesh.scale.set(1, 1, 1);
+    this.mesh.position.set(
+      this.worldBase.x,
+      this.worldBase.y + remaining * 0.5,
+      this.worldBase.z,
+    );
+    this.flame.visible = false;
+    this.flame.scale.setScalar(0);
+    if (this.light) this.light.intensity = 0;
+  }
+}
+
+// =====================================================================
+//  7. RAUCH — ein kleiner Sprite-Pool
+// =====================================================================
+
+function initSmoke() {
+  for (let i = 0; i < CONFIG.smoke.max; i++) {
+    const material = new THREE.SpriteMaterial({
+      map: textures.smoke,
+      color: 0x8d8073,
+      transparent: true,
+      opacity: 0,
+      depthWrite: false,
+      blending: THREE.NormalBlending,
+    });
+    const sprite = new THREE.Sprite(material);
+    sprite.visible = false;
+    scene.add(sprite);
+    state.smoke.push({
+      sprite,
+      material,
+      life: 0,
+      maxLife: 1,
+      velocity: new THREE.Vector3(),
+    });
+  }
+}
+
+function updateSmoke(dt) {
+  state.smokeTimer -= dt;
+  if (state.smokeTimer <= 0) {
+    state.smokeTimer = CONFIG.smoke.interval * rand(0.7, 1.35);
+    const active = state.wicks.filter((wick) => wick.active);
+    if (active.length && Math.random() > 0.28) {
+      const wick = active[Math.floor(Math.random() * active.length)];
+      const puff = state.smoke.find((candidate) => candidate.life <= 0);
+      if (puff) {
+        puff.life = rand(1.8, 3.2);
+        puff.maxLife = puff.life;
+        puff.sprite.visible = true;
+        puff.sprite.position.set(
+          wick.tipWorld.x + rand(-0.02, 0.02),
+          wick.tipWorld.y + rand(0.22, 0.34),
+          wick.tipWorld.z + rand(-0.02, 0.02),
+        );
+        puff.sprite.scale.setScalar(0.08);
+        puff.velocity.set(
+          rand(-0.025, 0.025) + state.wind.x * 0.08,
+          rand(0.12, 0.22),
+          rand(-0.02, 0.02) + state.wind.z * 0.08,
+        );
+        puff.material.opacity = 0;
+      }
+    }
+  }
+
+  for (const puff of state.smoke) {
+    if (puff.life <= 0) continue;
+    puff.life -= dt;
+    if (puff.life <= 0) {
+      puff.sprite.visible = false;
+      puff.material.opacity = 0;
+      continue;
+    }
+    const t = puff.life / puff.maxLife;
+    puff.sprite.position.addScaledVector(puff.velocity, dt);
+    puff.velocity.y += 0.035 * dt;
+    puff.sprite.position.x += state.wind.x * 0.09 * dt;
+    puff.sprite.position.z += state.wind.z * 0.09 * dt;
+    const size = lerp(0.58, 0.08, t);
+    puff.sprite.scale.setScalar(size);
+    puff.material.opacity = Math.sin(Math.PI * t) * 0.13;
+  }
+}
+
+// =====================================================================
+//  8. TROPFEN — Fall, Luftwiderstand, Wind, Verschmelzen, Aufprall
+// =====================================================================
+
+class DropletSystem {
+  constructor() {
+    this.drops = [];
+    this.spawnTimer = 0.8;
+    this.dummy = new THREE.Object3D();
+    this.geometry = new THREE.SphereGeometry(1, 10, 7);
+    this.instanced = new THREE.InstancedMesh(
+      this.geometry,
+      materials.drop,
+      CONFIG.melt.maxDrops,
+    );
+    this.instanced.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    this.instanced.frustumCulled = false;
+    this.instanced.castShadow = false;
+    this.instanced.receiveShadow = false;
+    this.instanced.count = 0;
+    scene.add(this.instanced);
+  }
+
+  update(dt) {
+    this.spawnTimer -= dt;
+    if (this.spawnTimer <= 0) {
+      this.spawnTimer = CONFIG.melt.dropInterval + Math.random() * CONFIG.melt.dropJitter;
+      this.trySpawn();
+    }
+
+    for (let i = this.drops.length - 1; i >= 0; i--) {
+      const drop = this.drops[i];
+
+      // Schwerkraft + Luftwiderstand + Wind.
+      drop.velocity.y -= CONFIG.melt.gravity * dt;
+      drop.velocity.multiplyScalar(Math.max(0, 1 - CONFIG.melt.drag * dt));
+      drop.velocity.x += state.wind.x * CONFIG.melt.dropPush * dt;
+      drop.velocity.z += state.wind.z * CONFIG.melt.dropPush * dt;
+      drop.position.addScaledVector(drop.velocity, dt);
+
+      // TABLE: Aufprall auf der Tischebene.
+      if (drop.position.y - drop.radius <= CONFIG.tableY) {
+        this.land(drop);
+        this.drops.splice(i, 1);
+      }
+    }
+
+    this.merge();
+    this.updateInstances();
+  }
+
+  trySpawn() {
+    const active = state.wicks.filter((wick) => wick.active && wick.lit > 0.55);
+    if (active.length === 0 || this.drops.length >= CONFIG.melt.maxDrops) return;
+
+    const wick = active[Math.floor(Math.random() * active.length)];
+    const part = wick.part;
+    if (!part.rimCandidates.length) return;
+
+    // rimCandidates enthaelt logische (verschweisste) Vertex-Indizes.
+    // Deren aktuelle Position steht in uniquePos, nicht im Renderbuffer.
+    const vertex = part.rimCandidates[Math.floor(Math.random() * part.rimCandidates.length)];
+    const ix = vertex * 3;
+    const positions = part.uniquePos;
+    const x = part.mesh.position.x + positions[ix];
+    const y = CONFIG.tableY + positions[ix + 1];
+    const z = part.mesh.position.z + positions[ix + 2];
+
+    const centerX = part.mesh.position.x + (part.bbox.min.x + part.bbox.max.x) / 2;
+    const centerZ = part.mesh.position.z + (part.bbox.min.z + part.bbox.max.z) / 2;
+    let outwardX = x - centerX;
+    let outwardZ = z - centerZ;
+    const length = Math.hypot(outwardX, outwardZ) || 1;
+    outwardX /= length;
+    outwardZ /= length;
+
+    const radius = rand(CONFIG.melt.radiusMin, CONFIG.melt.radiusMax);
+    const temp = clamp(part.uniqueTemps[vertex], 0.35, 1);
+    this.drops.push({
+      position: new THREE.Vector3(
+        x + outwardX * 0.025,
+        y - 0.015,
+        z + outwardZ * 0.025,
+      ),
+      velocity: new THREE.Vector3(
+        outwardX * rand(0.03, 0.1),
+        rand(-0.06, -0.01),
+        outwardZ * rand(0.03, 0.1),
+      ),
+      radius,
+      temp,
+    });
+  }
+
+  // Zwei Tropfen in der Luft verschmelzen zu einem groesseren.
+  merge() {
+    for (let i = 0; i < this.drops.length; i++) {
+      for (let j = i + 1; j < this.drops.length; j++) {
+        const a = this.drops[i];
+        const b = this.drops[j];
+        const dx = a.position.x - b.position.x;
+        const dy = a.position.y - b.position.y;
+        const dz = a.position.z - b.position.z;
+        const distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
+        if (distance >= (a.radius + b.radius) * 0.86) continue;
+
+        const volumeA = a.radius ** 3;
+        const volumeB = b.radius ** 3;
+        const total = volumeA + volumeB;
+        a.position
+          .multiplyScalar(volumeA / total)
+          .addScaledVector(b.position, volumeB / total);
+        a.velocity
+          .multiplyScalar(volumeA / total)
+          .addScaledVector(b.velocity, volumeB / total);
+        a.radius = Math.cbrt(total);
+        a.temp = (a.temp * volumeA + b.temp * volumeB) / total;
+        this.drops.splice(j, 1);
+        j--;
+      }
+    }
+  }
+
+  land(drop) {
+    const volume = (4 / 3) * Math.PI * drop.radius ** 3 * CONFIG.puddles.volumeScale;
+    state.puddles.add(drop.position.x, drop.position.z, volume, drop.temp);
+  }
+
+  updateInstances() {
+    this.instanced.count = this.drops.length;
+    for (let i = 0; i < this.drops.length; i++) {
+      const drop = this.drops[i];
+      this.dummy.position.copy(drop.position);
+      const stretch = 1 + Math.min(1.7, Math.abs(drop.velocity.y) * 0.13);
+      this.dummy.scale.set(drop.radius, drop.radius * stretch, drop.radius);
+      this.dummy.updateMatrix();
+      this.instanced.setMatrixAt(i, this.dummy.matrix);
+    }
+    this.instanced.instanceMatrix.needsUpdate = true;
+  }
+
+  clear() {
+    this.drops.length = 0;
+    this.instanced.count = 0;
+    this.instanced.instanceMatrix.needsUpdate = true;
+    this.spawnTimer = 0.8;
+  }
+}
+
+// =====================================================================
+//  9. PFUETZEN — addierte Metaballfelder auf Canvas 2D
+// ---------------------------------------------------------------------
+//  Jeder Tropfen ist ein weicher Radialgradient. Werden die Gradienten
+//  addiert, verschmelzen benachbarte Tropfen zu einer gemeinsamen
+//  Aequipotentialflaeche. Die Canvas-Textur wird als AlphaMap/Map und
+//  als BumpMap auf eine flache Tischplatte gelegt. Das ist bewusst eine
+//  performante 2D-Projektion der sonst 3D gedachten Metaball-Idee.
+// =====================================================================
+
+class PuddleSystem {
+  constructor() {
+    this.puddles = [];
+    this.mode = CONFIG.physicsMode;
+
+    this.colorCanvas = makeCanvas(CONFIG.puddles.canvasWidth, 256);
+    this.colorCtx = this.colorCanvas.getContext('2d');
+    this.fieldCanvas = makeCanvas(CONFIG.puddles.canvasWidth, 256);
+    this.fieldCtx = this.fieldCanvas.getContext('2d');
+
+    this.colorTexture = new THREE.CanvasTexture(this.colorCanvas);
+    this.colorTexture.colorSpace = THREE.SRGBColorSpace;
+    this.colorTexture.minFilter = THREE.LinearFilter;
+    this.colorTexture.magFilter = THREE.LinearFilter;
+    this.colorTexture.generateMipmaps = false;
+
+    this.fieldTexture = new THREE.CanvasTexture(this.fieldCanvas);
+    this.fieldTexture.colorSpace = THREE.NoColorSpace;
+    this.fieldTexture.minFilter = THREE.LinearFilter;
+    this.fieldTexture.magFilter = THREE.LinearFilter;
+    this.fieldTexture.generateMipmaps = false;
+
+    this.material = new THREE.MeshPhysicalMaterial({
+      map: this.colorTexture,
+      color: 0xffffff,
+      transparent: true,
+      opacity: 1,
+      alphaTest: 0.012,
+      roughness: 0.2,
+      metalness: 0.0,
+      clearcoat: 1.0,
+      clearcoatRoughness: 0.18,
+      bumpMap: this.fieldTexture,
+      bumpScale: 0.085,
+      envMapIntensity: 0.85,
+      emissive: new THREE.Color(0x1a0802),
+      emissiveIntensity: 0.35,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+    });
+
+    this.plane = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), this.material);
+    this.plane.rotation.x = -Math.PI / 2;
+    this.plane.frustumCulled = false;
+    this.plane.renderOrder = 1;
+    scene.add(this.plane);
+
+    // PHYSICS: Alternative Darstellung — einzelne abgeflachte Tropfen.
+    this.discMaterial = new THREE.MeshPhysicalMaterial({
+      color: 0xffffff,
+      roughness: 0.18,
+      metalness: 0.0,
+      clearcoat: 1.0,
+      clearcoatRoughness: 0.18,
+      envMapIntensity: 0.8,
+      emissive: new THREE.Color(0x170702),
+      emissiveIntensity: 0.35,
+    });
+    this.discs = new THREE.InstancedMesh(
+      new THREE.SphereGeometry(1, 18, 9),
+      this.discMaterial,
+      CONFIG.puddles.max,
+    );
+    this.discs.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    this.discs.frustumCulled = false;
+    this.discs.count = 0;
+    scene.add(this.discs);
+
+    this.dummy = new THREE.Object3D();
+    this.color = new THREE.Color();
+    this.width = 8;
+    this.depth = CONFIG.puddles.depth;
+    this.minX = -4;
+    this.maxX = 4;
+    this.minZ = -this.depth / 2;
+    this.maxZ = this.depth / 2;
+    this.heightPx = 256;
+  }
+
+  configureBounds(wordWidth) {
+    this.width = Math.max(6, wordWidth + CONFIG.puddles.margin * 2);
+    this.depth = CONFIG.puddles.depth;
+    this.minX = -this.width / 2;
+    this.maxX = this.width / 2;
+    this.minZ = -this.depth / 2;
+    this.maxZ = this.depth / 2;
+
+    // Canvas-Aspect = Welt-Aspect, damit ein runder Tropfen auch in der
+    // Textur rund bleibt.
+    this.heightPx = Math.max(160, Math.round(
+      CONFIG.puddles.canvasWidth * this.depth / this.width,
+    ));
+    this.colorCanvas.height = this.heightPx;
+    this.fieldCanvas.height = this.heightPx;
+
+    this.plane.geometry.dispose();
+    this.plane.geometry = new THREE.PlaneGeometry(this.width, this.depth);
+    this.plane.position.set(0, CONFIG.tableY + 0.006, 0);
+    this.clearCanvases();
+    this.setMode(this.mode);
+  }
+
+  setMode(mode) {
+    this.mode = mode;
+    this.plane.visible = mode === 'metaballs';
+    this.discs.visible = mode === 'discs';
+    if (mode === 'discs') this.updateDiscs();
+  }
+
+  add(x, z, volume, temp) {
+    const safeX = clamp(x, this.minX + 0.08, this.maxX - 0.08);
+    const safeZ = clamp(z, this.minZ + 0.08, this.maxZ - 0.08);
+    this.puddles.push({
+      x: safeX,
+      z: safeZ,
+      volume: Math.max(0.00002, volume),
+      thickness: CONFIG.puddles.thicknessStart,
+      temp: clamp(temp, 0.2, 1),
+      age: 0,
+    });
+    this.merge();
+  }
+
+  radiusOf(puddle) {
+    return Math.sqrt(puddle.volume / (Math.PI * Math.max(0.001, puddle.thickness)));
+  }
+
+  update(dt) {
+    for (const puddle of this.puddles) {
+      puddle.age += dt;
+      puddle.thickness = Math.max(
+        CONFIG.puddles.thicknessMin,
+        puddle.thickness - CONFIG.puddles.thicknessRate * dt,
+      );
+      puddle.temp = Math.max(0.16, puddle.temp - CONFIG.puddles.coolRate * dt);
+    }
+
+    this.merge();
+    this.draw();
+
+    if (this.mode === 'discs') this.updateDiscs();
+  }
+
+  // Logisches Verschmelzen: Das Volumen bleibt erhalten, der neue
+  // Mittelpunkt ist nach Volumen gewichtet. Die sichtbare Verschmelzung
+  // uebernimmt beim Metaball-Modus zusaetzlich das addierte Feld.
+  merge() {
+    let changed = true;
+    while (changed && this.puddles.length > 1) {
+      changed = false;
+      for (let i = 0; i < this.puddles.length && !changed; i++) {
+        for (let j = i + 1; j < this.puddles.length; j++) {
+          const a = this.puddles[i];
+          const b = this.puddles[j];
+          const dx = a.x - b.x;
+          const dz = a.z - b.z;
+          const distance = Math.hypot(dx, dz);
+          const reach = (this.radiusOf(a) + this.radiusOf(b)) * CONFIG.puddles.mergeFactor;
+          if (distance > reach) continue;
+
+          const volumeA = a.volume;
+          const volumeB = b.volume;
+          const total = volumeA + volumeB;
+          a.x = (a.x * volumeA + b.x * volumeB) / total;
+          a.z = (a.z * volumeA + b.z * volumeB) / total;
+          a.thickness = (a.thickness * volumeA + b.thickness * volumeB) / total;
+          a.temp = (a.temp * volumeA + b.temp * volumeB) / total;
+          a.volume = total;
+          a.age = Math.max(a.age, b.age);
+          this.puddles.splice(j, 1);
+          changed = true;
+          break;
+        }
+      }
+    }
+
+    // Notbremse: nie mehr als das konfigurierte Maximum.
+    while (this.puddles.length > CONFIG.puddles.max) {
+      this.puddles.sort((a, b) => a.volume - b.volume);
+      const small = this.puddles.shift();
+      const into = this.puddles[0];
+      const total = into.volume + small.volume;
+      into.x = (into.x * into.volume + small.x * small.volume) / total;
+      into.z = (into.z * into.volume + small.z * small.volume) / total;
+      into.volume = total;
+    }
+  }
+
+  draw() {
+    const W = this.colorCanvas.width;
+    const H = this.colorCanvas.height;
+    this.colorCtx.clearRect(0, 0, W, H);
+    this.fieldCtx.clearRect(0, 0, W, H);
+
+    if (this.puddles.length === 0) {
+      this.colorTexture.needsUpdate = true;
+      this.fieldTexture.needsUpdate = true;
+      return;
+    }
+
+    this.colorCtx.globalCompositeOperation = 'lighter';
+    this.fieldCtx.globalCompositeOperation = 'lighter';
+
+    for (const puddle of this.puddles) {
+      const radius = this.radiusOf(puddle) * 1.16;
+      const cx = ((puddle.x - this.minX) / this.width) * W;
+      const cy = ((puddle.z - this.minZ) / this.depth) * H;
+      const rp = Math.max(2.0, (radius / this.width) * W);
+
+      const warm = clamp(puddle.temp, 0, 1);
+      const red = Math.round(lerp(COLORS.puddleCool[0], COLORS.puddleWarm[0], warm) * 255);
+      const green = Math.round(lerp(COLORS.puddleCool[1], COLORS.puddleWarm[1], warm) * 255);
+      const blue = Math.round(lerp(COLORS.puddleCool[2], COLORS.puddleWarm[2], warm) * 255);
+
+      const colorGradient = this.colorCtx.createRadialGradient(cx, cy, 0, cx, cy, rp);
+      colorGradient.addColorStop(0.0, `rgba(${red},${green},${blue},0.96)`);
+      colorGradient.addColorStop(0.52, `rgba(${red},${green},${blue},0.9)`);
+      colorGradient.addColorStop(0.83, `rgba(${red},${green},${blue},0.34)`);
+      colorGradient.addColorStop(1.0, `rgba(${red},${green},${blue},0)`);
+      this.colorCtx.fillStyle = colorGradient;
+      this.colorCtx.beginPath();
+      this.colorCtx.arc(cx, cy, rp, 0, Math.PI * 2);
+      this.colorCtx.fill();
+
+      // Feld fuer den Bump: heller Kern, schwarzer Rand. Die Addition
+      // mehrerer Felder erzeugt den weichen Uebergang.
+      const fieldGradient = this.fieldCtx.createRadialGradient(cx, cy, 0, cx, cy, rp);
+      fieldGradient.addColorStop(0.0, 'rgba(255,255,255,1)');
+      fieldGradient.addColorStop(0.55, 'rgba(150,150,150,1)');
+      fieldGradient.addColorStop(0.85, 'rgba(35,35,35,1)');
+      fieldGradient.addColorStop(1.0, 'rgba(0,0,0,1)');
+      this.fieldCtx.fillStyle = fieldGradient;
+      this.fieldCtx.beginPath();
+      this.fieldCtx.arc(cx, cy, rp, 0, Math.PI * 2);
+      this.fieldCtx.fill();
+    }
+
+    this.colorCtx.globalCompositeOperation = 'source-over';
+    this.fieldCtx.globalCompositeOperation = 'source-over';
+    this.colorTexture.needsUpdate = true;
+    this.fieldTexture.needsUpdate = true;
+  }
+
+  updateDiscs() {
+    this.discs.count = Math.min(this.puddles.length, CONFIG.puddles.max);
+    for (let i = 0; i < this.discs.count; i++) {
+      const puddle = this.puddles[i];
+      const radius = this.radiusOf(puddle);
+      this.dummy.position.set(
+        puddle.x,
+        CONFIG.tableY + puddle.thickness * 0.36,
+        puddle.z,
+      );
+      this.dummy.scale.set(radius, puddle.thickness * 0.55, radius);
+      this.dummy.updateMatrix();
+      this.discs.setMatrixAt(i, this.dummy.matrix);
+
+      const warm = clamp(puddle.temp, 0, 1);
+      this.color.setRGB(
+        lerp(COLORS.puddleCool[0], COLORS.puddleWarm[0], warm),
+        lerp(COLORS.puddleCool[1], COLORS.puddleWarm[1], warm),
+        lerp(COLORS.puddleCool[2], COLORS.puddleWarm[2], warm),
+      );
+      this.discs.setColorAt(i, this.color);
+    }
+    this.discs.instanceMatrix.needsUpdate = true;
+    if (this.discs.instanceColor) this.discs.instanceColor.needsUpdate = true;
+  }
+
+  clearCanvases() {
+    this.colorCtx.clearRect(0, 0, this.colorCanvas.width, this.colorCanvas.height);
+    this.fieldCtx.clearRect(0, 0, this.fieldCanvas.width, this.fieldCanvas.height);
+    this.colorTexture.needsUpdate = true;
+    this.fieldTexture.needsUpdate = true;
+  }
+
+  clear() {
+    this.puddles.length = 0;
+    this.clearCanvases();
+    this.discs.count = 0;
+    this.discs.instanceMatrix.needsUpdate = true;
+  }
+}
+
+// =====================================================================
+//  10. SPLITTER — ein Stueck Bruch mit parabolischer Flugbahn
+// =====================================================================
+
+class ShardSystem {
+  constructor() {
+    this.shards = [];
+    this.box = new THREE.Box3();
+  }
+
+  spawn(part) {
+    if (this.shards.length >= CONFIG.shards.max) return null;
+    // split() schneidet das Mesh an einer Ebene und liefert einen
+    // geschlossenen, gecappten Brocken samt Hauptrest zurueck.
+    const chunk = part.split();
+    if (!chunk) return null;
+
+    const mesh = new THREE.Mesh(chunk.geometry, materials.shard);
+    mesh.position.copy(chunk.center);
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    scene.add(mesh);
+
+    const outward = chunk.center.clone();
+    outward.y = 0;
+    if (outward.lengthSq() < 0.0001) outward.set(rand(-1, 1), 0, rand(-0.4, 0.4));
+    outward.normalize();
+
+    this.shards.push({
+      mesh,
+      velocity: new THREE.Vector3(
+        outward.x * rand(0.25, 0.7) + rand(-0.15, 0.15),
+        rand(0.55, 1.2),
+        outward.z * rand(0.25, 0.7) + rand(-0.18, 0.18),
+      ),
+      angularVelocity: new THREE.Vector3(
+        rand(-4.5, 4.5),
+        rand(-5.5, 5.5),
+        rand(-4.5, 4.5),
+      ),
+      volume: chunk.volume,
+      restTime: 0,
+      meltTime: 0,
+      settled: false,
+    });
+
+    part.stress = 0;
+    part.cooldown = CONFIG.shards.cooldown;
+    return mesh;
+  }
+
+  update(dt) {
+    for (let i = this.shards.length - 1; i >= 0; i--) {
+      const shard = this.shards[i];
+      const mesh = shard.mesh;
+
+      if (!shard.settled) {
+        shard.velocity.y -= CONFIG.shards.gravity * dt;
+        shard.velocity.multiplyScalar(Math.max(0, 1 - CONFIG.shards.drag * dt));
+        mesh.position.addScaledVector(shard.velocity, dt);
+        mesh.rotation.x += shard.angularVelocity.x * dt;
+        mesh.rotation.y += shard.angularVelocity.y * dt;
+        mesh.rotation.z += shard.angularVelocity.z * dt;
+
+        mesh.updateMatrixWorld(true);
+        this.box.setFromObject(mesh);
+
+        // TABLE: Auch Splitter kennen nur die eine Kollisionsebene.
+        if (this.box.min.y < CONFIG.tableY) {
+          mesh.position.y += CONFIG.tableY - this.box.min.y;
+          if (shard.velocity.y < 0) shard.velocity.y *= -0.18;
+          shard.velocity.x *= 0.64;
+          shard.velocity.z *= 0.64;
+          shard.angularVelocity.multiplyScalar(0.55);
+          shard.restTime += dt;
+          if (shard.restTime > 0.55) {
+            shard.settled = true;
+            shard.velocity.set(0, 0, 0);
+            shard.angularVelocity.set(0, 0, 0);
+          }
+        } else {
+          shard.restTime = 0;
+        }
+      } else {
+        shard.meltTime += dt;
+        if (shard.meltTime > CONFIG.shards.restMeltDelay) {
+          const fade = clamp(
+            (shard.meltTime - CONFIG.shards.restMeltDelay) / 0.9,
+            0,
+            1,
+          );
+          mesh.scale.setScalar(Math.max(0.001, 1 - fade));
+          if (fade >= 1) {
+            const volume = shard.volume * 1.2;
+            state.puddles.add(mesh.position.x, mesh.position.z, volume, 0.5);
+            scene.remove(mesh);
+            mesh.geometry.dispose();
+            this.shards.splice(i, 1);
+          }
+        }
+      }
+    }
+  }
+
+  clear() {
+    for (const shard of this.shards) {
+      scene.remove(shard.mesh);
+      shard.mesh.geometry.dispose();
+    }
+    this.shards.length = 0;
+  }
+}
+
+// =====================================================================
+//  11. AUFBAU, RESET UND RENDER-LOOP
+// =====================================================================
+
+const loaderElement = document.getElementById('loader');
+const loaderText = document.getElementById('loaderText');
+const debugElement = document.getElementById('debug');
+const fadeElement = document.getElementById('fade');
+const hudElement = document.getElementById('hud');
+const subtitleElement = document.querySelector('.subtitle');
+
+let composer = null;
+let bloomPass = null;
+let debugTimer = 0;
+const clock = new THREE.Clock();
+
+function setupComposer() {
+  if (!CONFIG.bloom) return;
+  composer = new EffectComposer(renderer);
+  composer.addPass(new RenderPass(scene, camera));
+  bloomPass = new UnrealBloomPass(
+    new THREE.Vector2(window.innerWidth, window.innerHeight),
+    0.34,
+    0.64,
+    0.84,
+  );
+  composer.addPass(bloomPass);
+  composer.addPass(new OutputPass());
+  composer.setSize(window.innerWidth, window.innerHeight);
+}
+
+function onResize() {
+  const width = window.innerWidth;
+  const height = window.innerHeight;
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.65));
+  renderer.setSize(width, height);
+  if (composer) composer.setSize(width, height);
+  fitCamera(state.model ? state.model.width : 8);
+}
+
+function updateWind(dt) {
+  const smoothing = 1 - Math.exp(-CONFIG.wind.smooth * dt);
+  state.wind.lerp(state.windTarget, smoothing);
+}
+
+function updateDust(dt) {
+  if (!dust) return;
+  const positions = dust.geometry.attributes.position.array;
+  for (let i = 0; i < positions.length; i += 3) {
+    positions[i + 1] += (0.012 + (i % 9) * 0.0025) * dt;
+    positions[i + 0] += state.wind.x * 0.022 * dt;
+    positions[i + 2] += state.wind.z * 0.022 * dt;
+    if (positions[i + 1] > CONFIG.tableY + 4.8) {
+      positions[i + 1] = CONFIG.tableY + 0.1;
+      positions[i + 0] = rand(-7, 7);
+      positions[i + 2] = rand(-3.5, 4.5);
+    }
+  }
+  dust.geometry.attributes.position.needsUpdate = true;
+}
+
+function updateScene(dt) {
+  state.elapsed += dt;
+  state.normalFrame++;
+  updateWind(dt);
+
+  // Reihenfolge: erst die Dochte (Hitzequelle bewegen), dann die
+  // Buchstaben (Temperatur + Schmelze), dann die Wachssysteme.
+  for (const wick of state.wicks) {
+    wick.update(dt, state.time, state.elapsed);
+  }
+  for (const part of state.parts) {
+    part.update(dt);
+  }
+
+  // Bruch: heisse, duenne Stellen verlieren ihre Stabilitaet. canBreak()
+  // prueft Cooldown, Gewicht und ob ueberhaupt genug Wachs geschmolzen ist.
+  for (const part of state.parts) {
+    if (!part.canBreak()) continue;
+    state.shards.spawn(part);
+  }
+
+  state.drops.update(dt);
+  state.puddles.update(dt);
+  state.shards.update(dt);
+  updateSmoke(dt);
+  updateDust(dt);
+
+  if (bokeh) {
+    bokeh.material.opacity = 0.62 + Math.sin(state.time * 0.65) * 0.1;
+  }
+
+  if (state.elapsed > CONFIG.loopSeconds && !state.resetting) {
+    requestReset();
+  }
+}
+
+function requestReset() {
+  if (state.resetting) return;
+  state.resetting = true;
+  fadeElement.style.opacity = '1';
+  window.setTimeout(() => {
+    resetScene();
+    fadeElement.style.opacity = '0';
+    state.resetting = false;
+  }, 1150);
+}
+
+function resetScene() {
+  state.elapsed = 0;
+  state.time = 0;
+  state.normalFrame = 0;
+  state.smokeTimer = 0;
+  state.wind.set(0, 0, 0);
+  state.windTarget.set(0, 0, 0);
+
+  for (const part of state.parts) part.reset();
+  for (const wick of state.wicks) wick.reset();
+  state.drops.clear();
+  state.puddles.clear();
+  state.shards.clear();
+
+  for (const puff of state.smoke) {
+    puff.life = 0;
+    puff.sprite.visible = false;
+    puff.material.opacity = 0;
+  }
+}
+
+function renderFrame() {
+  if (composer) composer.render();
+  else renderer.render(scene, camera);
+}
+
+function updateFps(rawDt) {
+  state.fpsFrames++;
+  state.fpsTime += rawDt;
+  if (state.fpsTime >= 0.5) {
+    state.fps = state.fpsFrames / state.fpsTime;
+    state.fpsFrames = 0;
+    state.fpsTime = 0;
+  }
+}
+
+function updateDebug(rawDt) {
+  if (!debugElement.classList.contains('visible')) return;
+  debugTimer -= rawDt;
+  if (debugTimer > 0) return;
+  debugTimer = 0.22;
+
+  const vertices = state.parts.reduce((sum, part) => sum + part.count, 0);
+  const activeWicks = state.wicks.filter((wick) => wick.active).length;
+  const lines = [
+    `FPS        ${state.fps.toFixed(1)}`,
+    `Modell     ${state.model ? state.model.kind : '-'} · ${state.parts.length} Teile · ${vertices} Vertices`,
+    `Physik     ${CONFIG.physicsMode}`,
+    `Tropfen    ${state.drops ? state.drops.drops.length : 0}`,
+    `Pfuetzen   ${state.puddles ? state.puddles.puddles.length : 0}`,
+    `Splitter   ${state.shards ? state.shards.shards.length : 0}`,
+    `Dochte     ${activeWicks}/${state.wicks.length}`,
+    `Zeit       ${state.elapsed.toFixed(1)} / ${CONFIG.loopSeconds} s`,
+    '',
+    'Kraefte: Schwerkraft · Luftwiderstand · Wind',
+    '         Waerme · Oberflaechenspannung · Kollision',
+  ];
+  debugElement.textContent = lines.join('\n');
+}
+
+function animate() {
+  requestAnimationFrame(animate);
+  const rawDt = Math.min(clock.getDelta(), 0.05);
+  if (!state.ready) return;
+
+  if (!state.paused && !state.resetting) {
+    updateScene(rawDt);
+    state.time += rawDt;
+  }
+
+  renderFrame();
+  updateFps(rawDt);
+  updateDebug(rawDt);
+}
+
+function showFatalError(error) {
+  console.error(error);
+  loaderElement.classList.remove('done');
+  loaderElement.innerHTML = `
+    <p class="error">
+      Die Szene konnte nicht gestartet werden.<br><br>
+      ${String(error && error.message ? error.message : error)}
+      <br><br>
+      Bitte die Seite ueber einen lokalen Server oeffnen
+      (z.&nbsp;B. <code>python3 -m http.server</code>) und die Internetverbindung pruefen.
+    </p>
+  `;
+}
+
+async function init() {
+  try {
+    setupLights();
+    setupEnvironment();
+    initSmoke();
+
+    loaderText.textContent = 'Wachs wird gegossen …';
+    const model = await loadModel();
+    state.model = model;
+    state.parts = model.parts;
+    state.wicks = model.wicks;
+    scene.add(model.group);
+    model.group.position.y = CONFIG.tableY;
+
+    state.puddles = new PuddleSystem();
+    state.puddles.configureBounds(model.width);
+    state.drops = new DropletSystem();
+    state.shards = new ShardSystem();
+
+    fitCamera(model.width);
+    setupComposer();
+
+    state.ready = true;
+    loaderElement.classList.add('done');
+    window.setTimeout(() => loaderElement.remove(), 1000);
+    clock.getDelta();
+    animate();
+  } catch (error) {
+    showFatalError(error);
+  }
+}
+
+// =====================================================================
+//  12. EINGABE
+// =====================================================================
+
+window.addEventListener('resize', onResize);
+
+window.addEventListener('pointermove', (event) => {
+  const nx = (event.clientX / window.innerWidth) * 2 - 1;
+  const ny = (event.clientY / window.innerHeight) * 2 - 1;
+  state.windTarget.set(
+    nx * CONFIG.wind.strength,
+    0,
+    ny * CONFIG.wind.strength * 0.55,
+  );
+});
+
+window.addEventListener('pointerleave', () => {
+  state.windTarget.set(0, 0, 0);
+});
+
+window.addEventListener('keydown', (event) => {
+  const key = event.key.toLowerCase();
+  if (key === 'r') {
+    requestReset();
+  } else if (key === 'p') {
+    state.paused = !state.paused;
+    if (subtitleElement) {
+      subtitleElement.textContent = state.paused
+        ? 'Pause — die Kerze wartet.'
+        : 'Eine Kerze, die aus einem Wort besteht.';
+    }
+    clock.getDelta();
+  } else if (key === 'd') {
+    debugElement.classList.toggle('visible');
+  } else if (key === 'h') {
+    hudElement.classList.toggle('hidden');
+  }
+});
+
+window.addEventListener('visibilitychange', () => {
+  if (!document.hidden) clock.getDelta();
+});
+
+// Kleine, harmlose Debug-Schnittstelle fuer die Entwicklung. Sie erlaubt
+// es, den Zustand im Browser ohne DevTools zu pruefen.
+window.__CANDLE__ = { state, CONFIG, scene, camera, renderer, THREE };
+window.__CANDLE_ERRORS__ = [];
+window.addEventListener('error', (event) => {
+  window.__CANDLE_ERRORS__.push(String(event.message || event.error || event));
+});
+window.addEventListener('unhandledrejection', (event) => {
+  window.__CANDLE_ERRORS__.push(String(event.reason || event));
+});
+
+init();
+
+  </script>
+</body>
+</html>
