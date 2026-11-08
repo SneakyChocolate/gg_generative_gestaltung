@@ -2,7 +2,7 @@ export const CONFIG = {
   // CONFIG: Wort der Kerze. Grossbuchstaben geben allen Dochten dieselbe
   // Hoehe; kleinere Buchstaben funktionieren ebenfalls (Docht sitzt dann
   // auf dem jeweiligen Hochpunkt).
-  word: 'WEIHNACHTEN',
+  word: 'erster Advent',
 
   // MODEL: 'text' = TextGeometry, 'external' = .gltf/.glb/.obj,
   // 'fallback' = Zylinder. Bei einem Ladefehler faellt alles auf den
