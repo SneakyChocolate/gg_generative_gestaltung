@@ -37,10 +37,10 @@ export const CONFIG = {
   bloom: true,
 
   camera: {
-    fov: 38,
+    fov: 20,
     height: 3.0,
-    offsetX: 0.55,
-    targetY: 0.92,
+    offsetX: 0.00,
+    targetY: 2.50,
     margin: 1.08,
   },
 
