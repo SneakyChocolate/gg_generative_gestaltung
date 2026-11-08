@@ -7,10 +7,10 @@ export const materials = {
   wax: new THREE.MeshPhysicalMaterial({
     color: 0xffffff,
     vertexColors: true,
-    roughness: 0.32,
+    roughness: 0.78,
     metalness: 0.0,
-    clearcoat: 0.72,
-    clearcoatRoughness: 0.35,
+    clearcoat: 0.08,
+    clearcoatRoughness: 0.8,
     sheen: 0.45,
     sheenColor: new THREE.Color(0xffd6a0),
     sheenRoughness: 0.62,
