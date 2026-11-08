@@ -22,9 +22,9 @@ python3 -m http.server 8080
 
 Ein lokaler Server ist empfehlenswert, weil der Browser die Schriftdatei und
 die Three.js-Module sonst je nach Einstellung blockiert. Für die Abgabe genügt
-es, `index.html` und dieses `README.md` zu zippen. Es müssen keine Bilder,
-Fonts oder Modelle mitgeliefert werden; alle Texturen werden zur Laufzeit mit
-Canvas 2D erzeugt.
+es, `index.html`, `sketch.js`, den Ordner `js/` und dieses `README.md` zu
+zippen. Es müssen keine Bilder, Fonts oder Modelle mitgeliefert werden; alle
+Texturen werden zur Laufzeit mit Canvas 2D erzeugt.
 
 **Bedienung**
 
@@ -79,23 +79,37 @@ Simulation, nicht aus der Kamera.
 
 ## 3. Architektur
 
-Alles liegt in `index.html`. Die Kommentarabschnitte im Quelltext sind die
-Orientierungspunkte:
+Der Code ist in logisch getrennte ES-Module unter `js/` aufgeteilt.
+`sketch.js` ist der p5.js-konforme Einstiegspunkt und enthält ausschließlich
+`setup()` und `draw()`. Da die Szene technisch mit Three.js läuft, übernimmt
+`main.js` die Aufgabe, die sonst p5.js erledigt: Er ruft `setup()` einmal auf
+und danach `draw()` über `requestAnimationFrame` in einer Schleife.
 
 ```
-0. CONFIG                    alle Stellschrauben an einer Stelle
-1. Helfer                    clamp, lerp, smoothstep, Zufall
-2. Texturen                  Holz, Läufer, Hintergrund, Flamme, Rauch
-3. Renderer/Kamera/Licht     Three.js-Setup, PMREM-Raumlicht, Bloom
-4. Modell                    TextGeometry / GLTF / OBJ / Fallback
-5. Buchstaben-Physik         CandlePart: Hitze, Schmelzen, Farbe, Bruch
-6. Docht und Flamme          Wick: Abbrand, Flackern, Punktlicht
-7. Rauch                     Sprite-Pool
-8. Tropfen                   DropletSystem: Fall, Wind, Verschmelzen
-9. Pfützen                   PuddleSystem: Metaballs oder Discs
-10. Splitter                 ShardSystem: Flugbahn und Aufschmelzen
-11. Aufbau/Reset/Renderloop  init, animate, resize, Debug
-12. Eingabe                  Maus, Tastatur, Sichtbarkeit
+index.html                 HTML, CSS und Import Map
+sketch.js                  nur setup() und draw()
+js/
+├── main.js                p5.js-konformer Runner (requestAnimationFrame)
+├── config.js              CONFIG und COLORS — alle Stellschrauben
+├── utils.js               clamp, lerp, rand, smoothstep
+├── state.js               gemeinsamer Laufzeit-Zustand
+├── renderer.js            scene, camera, renderer
+├── environment.js         Licht, Tisch, Deko, Staub/Bokeh, Kamera
+├── textures.js            prozedurale Canvas-Texturen
+├── materials.js           alle Materialien
+├── model.js               TextGeometry / GLTF / OBJ / Fallback
+├── input.js               Maus, Tastatur, Sichtbarkeit
+├── engine.js              init, Reset, Debug, Simulationsschritt
+├── physics/
+│   ├── topology.js        Vertex-Verschweißung, Nachbarschaften, Normalen
+│   ├── slicing.js         Mesh-Schnitt und Deckflächen
+│   └── candle-part.js     CandlePart: Hitze, Schmelzen, Bruch
+└── systems/
+    ├── wick.js            Docht und Flamme
+    ├── smoke.js           Rauch
+    ├── droplets.js        Tropfen
+    ├── puddles.js         Pfützen (Metaballs oder Discs)
+    └── shards.js          Splitter
 ```
 
 **Datenfluss pro Frame**
@@ -462,7 +476,9 @@ oder Physik-Engines verwendet.
 
 ```
 ha4/ha3/
-├── index.html    komplette Szene (HTML, CSS, JavaScript, ohne eigene Shader)
+├── index.html    HTML, CSS und Import Map (kein Inline-JavaScript)
+├── sketch.js     p5.js-konformer Einstiegspunkt: nur setup() und draw()
+├── js/           ES-Module der Szene
 ├── README.md     diese Dokumentation
 └── scene.blend   optionale Blender-Datei, wird von index.html nicht geladen
 ```
