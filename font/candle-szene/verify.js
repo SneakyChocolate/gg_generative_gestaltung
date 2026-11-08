@@ -3,7 +3,8 @@ import * as CONFIG from "./config.js";
 import { buildGrid, cellIndex, floorOf, tallestColumnX } from "./grid.js";
 import { loadLetters } from "./model.js";
 import { temperatureAt, burnHeight, wickHeight, waxColor, updateLetter } from "./heat.js";
-import { createBreakage, takeBrokenPieces } from "./breakage.js";
+import { createBreakage, checkBreaks, findBreakingComponents, supportedCells } from "./breakage.js";
+import { breakOff, updatePieces, releaseUnsupported } from "./pieces.js";
 import { mergeDrops } from "./drops.js";
 import { stepFall } from "./physics.js";
 import { createSurface, updateSurface, heightAt } from "./surface.js";
@@ -117,28 +118,36 @@ check("model: Reserveplatz", letters.every((letter) => {
     && maxIndex < letter.vertexCount;
 }));
 
-const piecesPerLetter = letters.map((letter) => {
-  const breakage = createBreakage(letter);
-  let pieces = 0;
-  for (let second = 0; second <= CONFIG.BURN_SECONDS; second += 1) {
-    const burn = burnHeight(letter, second);
-    updateLetter(letter, burn, 1);
-    pieces += takeBrokenPieces(letter, breakage, burn).length;
+function syntheticGrid(cols, rows, aliveCells) {
+  const alive = new Uint8Array(cols * rows);
+  for (const [col, row] of aliveCells) alive[row * cols + col] = 1;
+  return { grid: { cols, rows }, alive };
+}
+
+function cellsInRect(fromCol, toCol, fromRow, toRow) {
+  const cells = [];
+  for (let col = fromCol; col <= toCol; col++) {
+    for (let row = fromRow; row <= toRow; row++) cells.push([col, row]);
   }
-  const index = letter.mesh.geometry.getIndex().array;
-  const positions = letter.mesh.geometry.getAttribute("position").array;
-  let highestStanding = -Infinity;
-  for (let corner = 0; corner < index.length; corner += 3) {
-    if (index[corner] === index[corner + 1]) continue;
-    for (let k = 0; k < 3; k++) highestStanding = Math.max(highestStanding, positions[index[corner + k] * 3 + 1]);
-  }
-  check(`heat: ${CONFIG.WORD[letters.indexOf(letter)]} ist am Ende ganz abgebrannt`, highestStanding < CONFIG.TABLE_Y + 0.01);
-  return pieces;
-});
-lines.push(`info: Brocken pro Buchstabe ${piecesPerLetter.join(", ")}`);
-check("breakage: I bleibt ganz", piecesPerLetter[CONFIG.WORD.indexOf("I")] === 0);
-check("breakage: E verliert Stücke", piecesPerLetter[CONFIG.WORD.indexOf("E")] > 0);
-check("breakage: T verliert Stücke", piecesPerLetter[CONFIG.WORD.indexOf("T")] > 0);
+  return cells;
+}
+
+const cold = () => 0;
+const hot = () => 1;
+const burnedT = syntheticGrid(7, 6, [...cellsInRect(2, 4, 0, 2), ...cellsInRect(0, 1, 4, 5), ...cellsInRect(5, 6, 4, 5)]);
+const fallingArms = findBreakingComponents(burnedT.grid, burnedT.alive, cold);
+check("breakage: T ohne Stammspitze → beide Arme fallen", fallingArms.length === 2 && fallingArms.every((cells) => cells.length === 4));
+check("breakage: Stamm bleibt stehen", fallingArms.every((cells) => cells.every((cell) => cell % 7 < 2 || cell % 7 > 4)));
+const shortArm = syntheticGrid(6, 4, [...cellsInRect(0, 0, 0, 3), ...cellsInRect(1, 4, 3, 3)]);
+check("breakage: kalter kurzer Überhang hält", findBreakingComponents(shortArm.grid, shortArm.alive, cold).length === 0);
+const hotArm = findBreakingComponents(shortArm.grid, shortArm.alive, hot);
+check("breakage: heißer kurzer Überhang bricht als ein Teil", hotArm.length === 1 && hotArm[0].length === 4);
+const pillar = syntheticGrid(3, 8, cellsInRect(0, 2, 0, 7));
+check("breakage: Säule bricht nie", findBreakingComponents(pillar.grid, pillar.alive, hot).length === 0);
+
+const breakAtStart = letters.map((letter) => checkBreaks(letter, createBreakage(letter), letter.top).length);
+lines.push(`info: Brüche bei t=0 ${breakAtStart.join(", ")}`);
+check("breakage: bei t=0 bricht nichts", breakAtStart.every((count) => count === 0));
 
 const dropA = { radius: 0.1, position: new THREE.Vector3(0, 0, 0), velocity: new THREE.Vector3(1, 0, 0), temperature: 1, sliding: true, floor: 0, resting: false };
 const dropB = { radius: 0.2, position: new THREE.Vector3(1, 0, 0), velocity: new THREE.Vector3(0, 0, 0), temperature: 0, sliding: false, floor: 0.5, resting: false };
@@ -151,6 +160,10 @@ check("drops: größerer Tropfen bestimmt Zustand", mergedDrop.sliding === false
 const surfaceLetter = letters[CONFIG.WORD.indexOf("E")];
 updateLetter(surfaceLetter, surfaceLetter.top, 0);
 const surface = createSurface(surfaceLetter);
+for (let vertex = 0; vertex < surfaceLetter.vertexCount; vertex++) {
+  const rightOfStem = surfaceLetter.rest[vertex * 3] > surfaceLetter.box.min.x + 0.25;
+  surfaceLetter.falling[vertex] = rightOfStem && surfaceLetter.rest[vertex * 3 + 1] > 0.35 ? 1 : 0;
+}
 updateSurface(surface, surfaceLetter);
 const barHeight = heightAt(surface, surfaceLetter.box.max.x - 0.08, 0);
 const stemHeight = heightAt(surface, surfaceLetter.box.min.x + 0.08, 0);
@@ -161,6 +174,122 @@ surfaceLetter.falling.fill(1);
 updateSurface(surface, surfaceLetter);
 check("surface: fallende Vertices zählen nicht", surface.heights.every((height) => height === -Infinity));
 surfaceLetter.falling.fill(0);
+
+const STEP = 0.1;
+const SETTLE_SECONDS = 10;
+
+function countHovering(letter, breakage) {
+  const aliveNow = breakage.alive.map((alive, cell) => (alive && !breakage.detached[cell] ? 1 : 0));
+  const supported = supportedCells(letter.grid, aliveNow);
+  return aliveNow.reduce((sum, alive, cell) => sum + (alive && !supported[cell] ? 1 : 0), 0);
+}
+
+function burnWithPieces(letter) {
+  const breakage = createBreakage(letter);
+  const surface = createSurface(letter);
+  const pieces = [];
+  const result = { pieces, overflows: 0, hovering: 0, landedHot: false };
+  const lastStep = Math.round((CONFIG.BURN_SECONDS + SETTLE_SECONDS) / STEP);
+  for (let step = 0; step <= lastStep; step++) {
+    const seconds = step * STEP;
+    const burn = burnHeight(letter, Math.min(seconds, CONFIG.BURN_SECONDS));
+    updatePieces(letter, pieces, surface, STEP);
+    updateLetter(letter, burn, STEP);
+    if (seconds <= CONFIG.BURN_SECONDS) {
+      let broke = false;
+      for (const cells of checkBreaks(letter, breakage, burn)) {
+        const broken = breakOff(letter, breakage, cells, burn);
+        if (broken === null) result.overflows++;
+        else pieces.push(...broken);
+        if (broken && broken.length > 0) broke = true;
+      }
+      if (broke) releaseUnsupported(letter, pieces, surface);
+      result.hovering += countHovering(letter, breakage);
+    }
+    updateSurface(surface, letter);
+    for (const piece of pieces) {
+      if (piece.landed && piece.vertices.some((vertex) => letter.temperatures[vertex] > 0)) result.landedHot = true;
+    }
+  }
+  return result;
+}
+
+function sharesIndexAcrossPieces(letter, pieces) {
+  const index = letter.mesh.geometry.getIndex().array;
+  const triangleOwner = new Int32Array(index.length / 3).fill(-1);
+  pieces.forEach((piece, number) => piece.triangles.forEach((triangle) => { triangleOwner[triangle] = number; }));
+  const vertexOwner = new Int32Array(letter.capacity).fill(-2);
+  for (let triangle = 0; triangle < triangleOwner.length; triangle++) {
+    for (let corner = 0; corner < 3; corner++) {
+      const vertex = index[triangle * 3 + corner];
+      if (vertexOwner[vertex] === -2) vertexOwner[vertex] = triangleOwner[triangle];
+      else if (vertexOwner[vertex] !== triangleOwner[triangle]) return true;
+    }
+  }
+  return false;
+}
+
+function pieceExtent(values, offset) {
+  let min = Infinity;
+  let max = -Infinity;
+  for (let i = offset; i < values.length; i += 3) {
+    min = Math.min(min, values[i]);
+    max = Math.max(max, values[i]);
+  }
+  return { min, max, size: max - min };
+}
+
+function centroidShift(letter, piece, offset) {
+  let before = 0;
+  let after = 0;
+  piece.vertices.forEach((vertex, k) => {
+    before += piece.start[k * 3 + offset];
+    after += letter.base[vertex * 3 + offset];
+  });
+  return Math.abs(after - before) / piece.vertices.length;
+}
+
+function highestStanding(letter, pieces) {
+  const index = letter.mesh.geometry.getIndex().array;
+  const positions = letter.mesh.geometry.getAttribute("position").array;
+  const inPiece = new Uint8Array(index.length / 3);
+  for (const piece of pieces) piece.triangles.forEach((triangle) => { inPiece[triangle] = 1; });
+  let highest = -Infinity;
+  for (let triangle = 0; triangle < inPiece.length; triangle++) {
+    const a = index[triangle * 3];
+    const b = index[triangle * 3 + 1];
+    const c = index[triangle * 3 + 2];
+    if (inPiece[triangle] || a === b || b === c || a === c) continue;
+    highest = Math.max(highest, positions[a * 3 + 1], positions[b * 3 + 1], positions[c * 3 + 1]);
+  }
+  return highest;
+}
+
+const burnResults = letters.map(burnWithPieces);
+const piecesPerLetter = burnResults.map((result) => result.pieces.length);
+lines.push(`info: Teile pro Buchstabe ${piecesPerLetter.join(", ")}`);
+lines.push(`info: Kapazitäts-Überläufe ${burnResults.map((result) => result.overflows).join(", ")}, Vertices danach ${letters.map((letter) => `${letter.vertexCount}/${letter.capacity}`).join(", ")}`);
+check("pieces: I bleibt ganz", piecesPerLetter[CONFIG.WORD.indexOf("I")] === 0);
+check("pieces: E verliert Teile", piecesPerLetter[CONFIG.WORD.indexOf("E")] > 0);
+check("pieces: T verliert Teile", piecesPerLetter[CONFIG.WORD.indexOf("T")] > 0);
+check("pieces: kein Kapazitäts-Überlauf", burnResults.every((result) => result.overflows === 0));
+check("pieces: nie lebende Zellen ohne Stütze (keine Schwebeteile)", burnResults.every((result) => result.hovering === 0));
+check("pieces: jedes Teil ist gelandet", burnResults.every((result) => result.pieces.every((piece) => piece.landed)));
+check("pieces: Teil und Rest teilen keinen Index", letters.every((letter, k) => !sharesIndexAcrossPieces(letter, burnResults[k].pieces)));
+check("pieces: kein Schub zur Seite, nur Kippen", letters.every((letter, k) => burnResults[k].pieces.every((piece) => {
+  const width = pieceExtent(piece.start, 0).size;
+  return centroidShift(letter, piece, 0) <= width * Math.sin(CONFIG.TIP_MAX_ANGLE) + 0.02 && centroidShift(letter, piece, 2) < 1e-6;
+})));
+check("pieces: gelandetes Teil nahe der Flamme wird heiß", burnResults.some((result) => result.landedHot));
+letters.forEach((letter, k) => {
+  check(`heat: ${CONFIG.WORD[k]} ist am Ende abgebrannt (ohne gefallene Teile)`, highestStanding(letter, burnResults[k].pieces) < CONFIG.TABLE_Y + 0.02);
+});
+const positionsAtEnd = letters.map((letter) => letter.mesh.geometry.getAttribute("position").array);
+check("pieces: gefallene Teile ragen nicht über ihre Landehöhe + Teilhöhe", letters.every((letter, k) => burnResults[k].pieces.every((piece) => {
+  const landingHeight = Math.min(...piece.vertices.map((vertex) => letter.base[vertex * 3 + 1]));
+  const drawnTop = Math.max(...piece.vertices.map((vertex) => positionsAtEnd[k][vertex * 3 + 1]));
+  return drawnTop <= landingHeight + pieceExtent(piece.start, 1).size + 0.01;
+})));
 
 document.getElementById("out").textContent = lines.join("\n");
 document.title = failures ? `FAIL ${failures}` : "PASS";

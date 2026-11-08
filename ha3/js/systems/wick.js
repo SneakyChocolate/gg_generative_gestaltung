@@ -3,7 +3,7 @@ import { CONFIG } from '../config.js';
 import { materials } from '../materials.js';
 import { scene } from '../renderer.js';
 import { state } from '../state.js';
-import { smoothstep } from '../utils.js';
+import { clamp, smoothstep } from '../utils.js';
 
 // Docht, Flamme, Abbrand und das mitwandernde Punktlicht.
 
@@ -16,28 +16,24 @@ const wickGeometry = new THREE.CylinderGeometry(
   false,
 );
 
+const UP = new THREE.Vector3(0, 1, 0);
+
 export class Wick {
   constructor(part, anchor, index) {
     this.part = part;
     this.index = index;
-    this.localBase = anchor.clone();
+    this.localBase = new THREE.Vector3();
+    this.localHeat = new THREE.Vector3();
+    this.worldBase = new THREE.Vector3();
+    this.tipWorld = new THREE.Vector3();
+    this.dir = new THREE.Vector3(0, 1, 0);
     this.height = CONFIG.wick.height;
-    this.burn = 0;
+    this.length = 1;
     this.lit = 0;
     this.active = false;
     this.ignitionDelay = 0.35 + index * CONFIG.wick.igniteGap;
     this.seed = Math.random() * 1000;
-
-    // localHeat liegt im Koordinatensystem des Buchstaben-Meshes.
-    this.localHeat = new THREE.Vector3(anchor.x, anchor.y, anchor.z);
-    this.surfaceY = anchor.y;
-    this.worldBase = new THREE.Vector3(
-      part.mesh.position.x + anchor.x,
-      CONFIG.tableY + anchor.y,
-      part.mesh.position.z + anchor.z,
-    );
-    this.tipWorld = new THREE.Vector3().copy(this.worldBase);
-
+    this.tiltAngle = this.seed;
     this.mesh = new THREE.Mesh(wickGeometry, materials.wick);
     this.mesh.castShadow = true;
     this.mesh.receiveShadow = true;
@@ -74,6 +70,7 @@ export class Wick {
       scene.add(this.light);
     }
 
+    this.setAnchor(anchor);
     this.reset();
   }
 
@@ -85,35 +82,47 @@ export class Wick {
     );
     this.active = this.lit > 0.04;
 
-    if (this.active) {
-      this.burn = Math.min(
-        this.height * 0.92,
-        this.burn + CONFIG.wick.burnSpeed * dt,
-      );
+    if (this.out) {
+      this.active = false;
+      return;
     }
 
-    const remaining = Math.max(0.012, this.height - this.burn);
-    // Flamme folgt der abgesackten Wachsoberflaeche.
-    this.followSurface();
-    this.localHeat.set(
+    const wax = this.part.surfaceHeightNear(
       this.localBase.x,
-      this.surfaceY + remaining,
       this.localBase.z,
+      CONFIG.wick.supportRadius,
     );
-    this.tipWorld.set(
-      this.worldBase.x,
-      this.worldBase.y + remaining,
-      this.worldBase.z,
-    );
+    if (!this.fallen && !(wax >= this.localBase.y + CONFIG.wick.minSupport)) {
+      this.fallen = true;
+      this.tiltVelocity = CONFIG.wick.fallKick;
+    }
 
-    // Der Docht wird kuerzer; die Flamme wandert mit nach unten.
-    const wickScale = remaining / this.height;
-    this.mesh.scale.set(1, wickScale, 1);
-    this.mesh.position.set(
-      this.worldBase.x,
-      this.worldBase.y + remaining * 0.5,
-      this.worldBase.z,
-    );
+    if (this.active) {
+      // Je weiter die Flamme vom Wachs und vom Boden entfernt ist, desto
+      // langsamer schmilzt das Wachs; der Docht darf es nicht ueberholen.
+      const gap = this.localHeat.y - (this.fallen ? this.localBase.y : wax);
+      const supply = CONFIG.wick.supplyFloor +
+        (1 - CONFIG.wick.supplyFloor) * smoothstep(0, CONFIG.wick.supplyGap, gap);
+      const height = clamp((this.localHeat.y - this.localBase.y) / this.length, 0, 1);
+      const heightFactor = CONFIG.wick.lowFlameRate + (1 - CONFIG.wick.lowFlameRate) * height;
+      this.burn += CONFIG.wick.burnSpeed * supply * heightFactor * dt;
+    }
+    this.burn = Math.min(this.burn, this.length - CONFIG.wick.minLength);
+
+    if (this.fallen && this.tilt < Math.PI / 2) {
+      this.tiltVelocity += CONFIG.wick.fallGravity * Math.sin(this.tilt) * dt;
+      this.tilt = Math.min(Math.PI / 2, this.tilt + this.tiltVelocity * dt);
+    }
+    this.placeWick();
+
+    if (this.fallen && this.length - this.burn <= CONFIG.wick.minLength + 1e-3) {
+      this.out = true;
+      this.active = false;
+      this.mesh.visible = false;
+      this.flame.visible = false;
+      if (this.light) this.light.intensity = 0;
+      return;
+    }
 
     // Flackern aus drei Sinuswellen: langsame Unruhe + schnelle Zuckung.
     const flicker = 0.88 +
@@ -126,10 +135,11 @@ export class Wick {
     const swayZ = state.wind.z * CONFIG.wind.flameSway +
       Math.cos(time * 1.9 + this.seed) * 0.004;
 
+    const flameBase = this.tipWorld.clone().addScaledVector(this.dir, -CONFIG.wick.flameDrop);
     this.flame.position.set(
-      this.tipWorld.x + sway,
-      this.tipWorld.y,
-      this.tipWorld.z + swayZ,
+      flameBase.x + sway,
+      flameBase.y,
+      flameBase.z + swayZ,
     );
     const flameScale = this.lit * flicker;
     this.flame.scale.setScalar(flameScale);
@@ -137,57 +147,64 @@ export class Wick {
 
     if (this.light) {
       this.light.position.set(
-        this.tipWorld.x + sway * 1.6,
-        this.tipWorld.y + 0.11,
-        this.tipWorld.z + swayZ * 1.6,
+        flameBase.x + sway * 1.6,
+        flameBase.y + 0.11,
+        flameBase.z + swayZ * 1.6,
       );
       this.light.intensity = this.lit * (5.5 + flicker * 3.5);
     }
   }
 
-  // Nach einem Bruch wandert der Docht auf die neue, tiefere Oberflaeche.
-  // localBase/worldBase werden nachgezogen; die restliche Flamme folgt
-  // beim naechsten update() automatisch.
+  // Der Fusspunkt steht auf dem Tisch; nur die Spitze brennt nach unten.
   setAnchor(anchor) {
-    this.localBase.copy(anchor);
-    this.surfaceY = anchor.y;
+    this.localBase.set(anchor.x, 0, anchor.z);
+    this.length = anchor.y + CONFIG.wick.extra;
     this.worldBase.set(
       this.part.mesh.position.x + anchor.x,
-      CONFIG.tableY + anchor.y,
+      CONFIG.tableY,
       this.part.mesh.position.z + anchor.z,
     );
-    this.localHeat.set(this.localBase.x, this.surfaceY + this.height, this.localBase.z);
-    this.tipWorld.set(this.worldBase.x, this.worldBase.y + this.height, this.worldBase.z);
+    this.clearState();
+    this.placeWick();
   }
 
-  // Liest die aktuelle Hoehe des Wachses unter dem Docht. Waehrend des
-  // Schmelzens sinkt die Flamme mit der Oberflaeche ab.
-  followSurface() {
-    const part = this.part;
-    if (!part || !part.uniquePos) return;
-    const y = part.surfaceHeightNear(this.localBase.x, this.localBase.z);
-    if (Number.isFinite(y)) this.surfaceY = Math.max(0.015, y);
-    this.worldBase.set(
-      part.mesh.position.x + this.localBase.x,
-      CONFIG.tableY + this.surfaceY,
-      part.mesh.position.z + this.localBase.z,
+  clearState() {
+    this.burn = 0;
+    this.tilt = 0;
+    this.tiltVelocity = 0;
+    this.fallen = false;
+    this.out = false;
+    this.mesh.visible = true;
+  }
+
+  placeWick() {
+    const length = this.length - this.burn;
+    const sinTilt = Math.sin(this.tilt);
+    this.dir.set(
+      sinTilt * Math.cos(this.tiltAngle),
+      Math.cos(this.tilt),
+      sinTilt * Math.sin(this.tiltAngle),
     );
+    // Liegt der Docht, ruht er mit seinem Radius auf dem Tisch.
+    const lift = CONFIG.wick.radius * 1.45 * sinTilt;
+    this.tipWorld.copy(this.worldBase).addScaledVector(this.dir, length);
+    this.tipWorld.y += lift;
+    this.localHeat.set(
+      this.tipWorld.x - this.part.mesh.position.x,
+      this.tipWorld.y - CONFIG.tableY,
+      this.tipWorld.z - this.part.mesh.position.z,
+    );
+    this.mesh.scale.set(1, length, 1);
+    this.mesh.position.copy(this.worldBase).addScaledVector(this.dir, length * 0.5);
+    this.mesh.position.y += lift;
+    this.mesh.quaternion.setFromUnitVectors(UP, this.dir);
   }
 
   reset() {
-    this.burn = 0;
     this.lit = 0;
     this.active = false;
-    const remaining = this.height;
-    this.surfaceY = this.localBase.y;
-    this.localHeat.set(this.localBase.x, this.surfaceY + remaining, this.localBase.z);
-    this.tipWorld.set(this.worldBase.x, this.worldBase.y + remaining, this.worldBase.z);
-    this.mesh.scale.set(1, 1, 1);
-    this.mesh.position.set(
-      this.worldBase.x,
-      this.worldBase.y + remaining * 0.5,
-      this.worldBase.z,
-    );
+    this.clearState();
+    this.placeWick();
     this.flame.visible = false;
     this.flame.scale.setScalar(0);
     if (this.light) this.light.intensity = 0;

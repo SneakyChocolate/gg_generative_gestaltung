@@ -58,8 +58,18 @@ export const CONFIG = {
 
   wick: {
     height: 0.18,
+    extra: 0.1,
+    supportRadius: 0.12,
+    minSupport: 0.08,
+    minLength: 0.03,
+    flameDrop: 0.02,
+    supplyGap: 0.15,
+    supplyFloor: 0.25,
+    lowFlameRate: 0.4,
+    fallGravity: 6,
+    fallKick: 0.15,
     radius: 0.012,
-    burnSpeed: 0.0018,
+    burnSpeed: 0.008,
     igniteGap: 0.16,
     igniteDuration: 0.72,
     lightEvery: 2,
@@ -116,6 +126,7 @@ export const CONFIG = {
 
   shards: {
     max: 10,
+    spawnGap: 0.05,
     gravity: 6.5,
     drag: 0.35,
     restMeltDelay: 2.4,

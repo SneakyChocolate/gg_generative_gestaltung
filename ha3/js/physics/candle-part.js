@@ -227,28 +227,20 @@ export class CandlePart {
     return candidates.length ? candidates : [0];
   }
 
-  // Aktuelle Oberflaechenhoehe nahe einer horizontalen Position. Der Docht
-  // benutzt das, um mit dem schmelzenden Wachs nach unten zu wandern, statt
-  // ueber der abgesackten Oberflaeche zu schweben.
-  surfaceHeightNear(x, z) {
+  // Hoechste Wachshoehe im Umkreis einer horizontalen Position, sonst
+  // -Infinity. Der Docht prueft damit, ob noch Wachs um ihn steht.
+  surfaceHeightNear(x, z, radius = 0.3) {
     const base = this.uniqueBase;
     const pos = this.uniquePos;
-    const radiusSq = 0.09;
+    const radiusSq = radius * radius;
     let highest = -Infinity;
-    let nearest = 0;
-    let nearestSq = Infinity;
     for (let u = 0; u < this.uniqueCount; u++) {
       const ix = u * 3;
       const dx = base[ix] - x;
       const dz = base[ix + 2] - z;
-      const d2 = dx * dx + dz * dz;
-      if (d2 < nearestSq) {
-        nearestSq = d2;
-        nearest = pos[ix + 1];
-      }
-      if (d2 <= radiusSq && pos[ix + 1] > highest) highest = pos[ix + 1];
+      if (dx * dx + dz * dz <= radiusSq && pos[ix + 1] > highest) highest = pos[ix + 1];
     }
-    return highest > -Infinity ? highest : nearest;
+    return highest;
   }
 
   update(dt) {
@@ -652,7 +644,6 @@ export class CandlePart {
     // des Hauptteils. Frueher geschmolzenes Wachs springt nicht zurueck.
     this.adoptGeometry(mainGeometry, mainGeometry.boundingBox, true);
     this.computeSmoothNormals();
-    this.reanchorWicks();
 
     this.cooldown = CONFIG.shards.cooldown;
     this.stress = 0;
@@ -664,6 +655,7 @@ export class CandlePart {
     return {
       geometry: chunkGeometry,
       center: worldCenter,
+      normal: plane.n.clone(),
       radius: chunkGeometry.boundingSphere.radius,
       volume,
     };

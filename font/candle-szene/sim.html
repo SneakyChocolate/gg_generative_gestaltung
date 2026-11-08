@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <title>ZEIT</title>
+  <style>
+    html, body { margin: 0; overflow: hidden; background: #07050a; }
+    canvas { display: block; }
+    #hud { position: fixed; top: 8px; left: 10px; font: 12px monospace; color: #c9b79c; }
+  </style>
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+    }
+  }
+  </script>
+</head>
+<body>
+  <div id="hud"></div>
+  <script type="module" src="sim.js"></script>
+</body>
+</html>

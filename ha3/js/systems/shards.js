@@ -21,7 +21,8 @@ export class ShardSystem {
     if (!chunk) return null;
 
     const mesh = new THREE.Mesh(chunk.geometry, materials.shard);
-    mesh.position.copy(chunk.center);
+    // Etwas vom Buchstaben weg erzeugen, damit der Brocken nicht im Rest steckt.
+    mesh.position.copy(chunk.center).addScaledVector(chunk.normal, CONFIG.shards.spawnGap);
     mesh.castShadow = true;
     mesh.receiveShadow = true;
     scene.add(mesh);
@@ -34,14 +35,14 @@ export class ShardSystem {
     this.shards.push({
       mesh,
       velocity: new THREE.Vector3(
-        outward.x * rand(0.25, 0.7) + rand(-0.15, 0.15),
-        rand(0.55, 1.2),
-        outward.z * rand(0.25, 0.7) + rand(-0.18, 0.18),
+        outward.x * rand(0.1, 0.3) + rand(-0.15, 0.15),
+        rand(0.1, 0.35),
+        outward.z * rand(0.1, 0.3) + rand(-0.18, 0.18),
       ),
       angularVelocity: new THREE.Vector3(
-        rand(-4.5, 4.5),
-        rand(-5.5, 5.5),
-        rand(-4.5, 4.5),
+        rand(-1.2, 1.2),
+        rand(-1.5, 1.5),
+        rand(-1.2, 1.2),
       ),
       volume: chunk.volume,
       restTime: 0,

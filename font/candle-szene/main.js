@@ -1,8 +1,9 @@
 import * as THREE from "three";
 import * as CONFIG from "./config.js";
-import { loadLetters } from "./model.js";
+import { loadLetters, loadScene } from "./model.js";
 import { burnHeight, updateLetter, wickHeight } from "./heat.js";
-import { createBreakage, takeBrokenPieces } from "./breakage.js";
+import { createBreakage, checkBreaks } from "./breakage.js";
+import { breakOff, updatePieces, releaseUnsupported } from "./pieces.js";
 import { createDropSystem } from "./drops.js";
 import { createFlame } from "./flame.js";
 import { createTable } from "./table.js";
@@ -25,7 +26,11 @@ const camera = new THREE.PerspectiveCamera(CONFIG.CAMERA_FOV, innerWidth / inner
 camera.position.set(...CONFIG.CAMERA_POSITION);
 camera.lookAt(...CONFIG.CAMERA_TARGET);
 
-createTable(scene);
+// createTable(scene);
+const loadedScene = await loadScene();
+loadedScene.position.set(...CONFIG.SCENE_POSITION);
+loadedScene.scale.setScalar(CONFIG.SCENE_SCALE);
+scene.add(loadedScene);
 
 const waxMaterial = new THREE.MeshPhysicalMaterial({
   vertexColors: true,
@@ -38,7 +43,7 @@ const letters = await loadLetters(waxMaterial);
 const candles = letters.map((letter) => {
   scene.add(letter.mesh);
   updateLetter(letter, letter.top, 0);
-  return { letter, breakage: createBreakage(letter), flame: createFlame(scene), surface: createSurface(letter) };
+  return { letter, breakage: createBreakage(letter), flame: createFlame(scene), surface: createSurface(letter), pieces: [], supportTimer: 0 };
 });
 const drops = createDropSystem(scene, letters);
 
@@ -66,18 +71,21 @@ renderer.setAnimationLoop(() => {
   const burnDt = dt * timeFactor;
   const wasBurning = burnSeconds < CONFIG.BURN_SECONDS;
   burnSeconds += burnDt;
-  for (const candle of candles) updateCandle(candle, wasBurning, burnDt);
+  for (const candle of candles) updateCandle(candle, wasBurning, dt, burnDt);
   drops.update(dt, burnDt);
   renderer.render(scene, camera);
   updateHud(frameSeconds);
 });
 
-function updateCandle({ letter, breakage, flame, surface }, wasBurning, burnDt) {
+function updateCandle(candle, wasBurning, dt, burnDt) {
+  const { letter, flame, surface, pieces } = candle;
   letter.burning = burnSeconds < CONFIG.BURN_SECONDS;
-  if (!wasBurning) return;
+  const piecesFalling = pieces.some((piece) => !piece.landed);
+  if (!wasBurning && !piecesFalling) return;
   const burn = burnHeight(letter, burnSeconds);
+  updatePieces(letter, pieces, surface, dt);
   updateLetter(letter, burn, burnDt);
-  takeBrokenPieces(letter, breakage, burn);
+  if (wasBurning) checkSupport(candle, burn, burnDt);
   updateSurface(surface, letter);
   if (!letter.burning) {
     flame.extinguish();
@@ -85,6 +93,19 @@ function updateCandle({ letter, breakage, flame, surface }, wasBurning, burnDt) 
   }
   flame.setPosition(letter.wick.x, wickHeight(burn), letter.wick.z);
   flame.update(clock.elapsedTime);
+}
+
+function checkSupport(candle, burn, burnDt) {
+  const { letter, breakage, surface, pieces } = candle;
+  candle.supportTimer += burnDt;
+  if (candle.supportTimer < CONFIG.SUPPORT_CHECK_SECONDS) return;
+  candle.supportTimer = 0;
+  const piecesBefore = pieces.length;
+  for (const cells of checkBreaks(letter, breakage, burn)) {
+    const piece = breakOff(letter, breakage, cells, burn);
+    if (piece) pieces.push(piece);
+  }
+  if (pieces.length > piecesBefore) releaseUnsupported(letter, pieces, surface);
 }
 
 function updateHud(dt) {

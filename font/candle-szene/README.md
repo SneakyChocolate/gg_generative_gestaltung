@@ -37,6 +37,8 @@ Zeit → Brennhöhe pro Buchstabe → `updateLetter` verformt und färbt → `ta
 ## Umschalten
 
 - Modell: `MODEL_SOURCE` in `config.js` (`"text"`, `"gltf"`, `"fallback"`). Bei Ladefehler automatisch Fallback.
+- Kamera: `CAMERA_FOV` steuert den Blickwinkel, `CAMERA_DISTANCE` den Abstand zur Szene.
+- GLB-Szene: `SCENE_POSITION` verschiebt und `SCENE_SCALE` skaliert `scene.glb`, ohne die Kerzen zu verschieben.
 - Tisch: `createTable` in `table.js` ersetzen, Oberkante auf `TABLE_Y`.
 
 ## Performance

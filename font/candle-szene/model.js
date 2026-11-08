@@ -18,6 +18,12 @@ export async function loadLetters(material) {
   return arrangeInRow(geometries).map(densify).map((geometry) => createLetter(geometry, material));
 }
 
+export async function loadScene() {
+  const gltf = await new GLTFLoader().loadAsync(CONFIG.SCENE_URL);
+  gltf.scene.updateMatrixWorld(true);
+  return gltf.scene;
+}
+
 async function loadSourceGeometries(source) {
   // MODEL: neue Modellquelle hier ergänzen
   if (source === "text") return textGeometries();
