@@ -18,6 +18,21 @@ export const CONFIG = {
   // anpassen; Tropfen, Splitter und Pfuetzen benutzen ausschliesslich ihn.
   tableY: 0,
 
+  // ENVIRONMENT: Die Blender-Umgebung (Tisch + Hintergrund) wird als GLB
+  // geladen. Die Deko (Kugeln, Zweig, Staub, Bokeh) bleibt in environment.js
+  // und wird weiterhin prozedural erzeugt.
+  environment: {
+    url: 'assets/scene.glb',
+    // Der Tisch im GLB ist etwa 2,67 Einheiten breit. Die Umgebung wird so
+    // skaliert, dass das Wort mit Rand darauf passt.
+    minTableWidth: 10.8,
+    widthPadding: 1.6,
+    offsetX: 0,
+    // Rueckt den GLB-Tisch etwas nach hinten, damit die kleinen Kerzen aus
+    // der Umgebung nicht vor dem Wort stehen.
+    offsetZ: -1.4,
+  },
+
   loopSeconds: 92,
   bloom: true,
 

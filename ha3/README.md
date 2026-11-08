@@ -8,7 +8,8 @@ Wachs, lassen Tropfen fallen, Pfützen verschmelzen und dünne Buchstaben
 abbrechen.
 
 Die Szene läuft vollständig im Browser. Es gibt keinen Build-Schritt und kein
-Backend. Three.js und die Schrift werden über ein CDN geladen.
+Backend. Three.js und die Schrift werden über ein CDN geladen; die
+Blender-Umgebung liegt als `assets/scene.glb` neben dem Projekt.
 
 ---
 
@@ -20,11 +21,12 @@ python3 -m http.server 8080
 # danach http://127.0.0.1:8080/index.html öffnen
 ```
 
-Ein lokaler Server ist empfehlenswert, weil der Browser die Schriftdatei und
-die Three.js-Module sonst je nach Einstellung blockiert. Für die Abgabe genügt
-es, `index.html`, `sketch.js`, den Ordner `js/` und dieses `README.md` zu
-zippen. Es müssen keine Bilder, Fonts oder Modelle mitgeliefert werden; alle
-Texturen werden zur Laufzeit mit Canvas 2D erzeugt.
+Ein lokaler Server ist empfehlenswert, weil der Browser die Schriftdatei, die
+Three.js-Module und die GLB-Umgebung sonst je nach Einstellung blockiert. Für
+die Abgabe genügt es, `index.html`, `sketch.js`, den Ordner `js/`, den Ordner
+`assets/` und dieses `README.md` zu zippen. Die Deko-Texturen werden weiterhin
+zur Laufzeit mit Canvas 2D erzeugt; die Hintergrundtextur steckt bereits
+eingebettet in `assets/scene.glb`.
 
 **Bedienung**
 
@@ -70,10 +72,11 @@ Die Farben sind keine Dekoration, sondern ein Temperatursensor:
 | warm | Honig / Orange | erhitzt, beginnt zu schmelzen |
 | heiß | Rotglut | direkt an der Flamme, kurz vor dem Tropfen |
 
-Die Umgebung ist ein weihnachtliches Stillleben: dunkle Holzplatte, grüner
-Läufer, Gold- und Rotkugeln, ein Tannenzweig, warmer Bokeh, Staub und Rauch.
-Die Kamera bleibt bewusst ruhig und cinematisch; die Bewegung kommt aus der
-Simulation, nicht aus der Kamera.
+Die Umgebung kommt aus einer kleinen Blender-Szene (`assets/scene.glb`):
+Tisch, fotografischer Hintergrund und drei kleine Kerzen. Darüber liegen die
+in JavaScript erzeugten Dekorationen: dunkelgrüner Läufer, Gold- und Rotkugeln,
+ein Tannenzweig, warmer Bokeh, Staub und Rauch. Die Kamera bleibt bewusst ruhig
+und cinematisch; die Bewegung kommt aus der Simulation, nicht aus der Kamera.
 
 ---
 
@@ -88,13 +91,16 @@ und danach `draw()` über `requestAnimationFrame` in einer Schleife.
 ```
 index.html                 HTML, CSS und Import Map
 sketch.js                  nur setup() und draw()
+assets/
+└── scene.glb              Blender-Umgebung: Tisch, Hintergrund, kleine Kerzen
 js/
 ├── main.js                p5.js-konformer Runner (requestAnimationFrame)
 ├── config.js              CONFIG und COLORS — alle Stellschrauben
 ├── utils.js               clamp, lerp, rand, smoothstep
 ├── state.js               gemeinsamer Laufzeit-Zustand
 ├── renderer.js            scene, camera, renderer
-├── environment.js         Licht, Tisch, Deko, Staub/Bokeh, Kamera
+├── environment.js         Licht, prozedurale Deko, Staub/Bokeh, Kamera
+├── environmentScene.js    GLB-Umgebung laden und am Tisch ausrichten
 ├── textures.js            prozedurale Canvas-Texturen
 ├── materials.js           alle Materialien
 ├── model.js               TextGeometry / GLTF / OBJ / Fallback
@@ -328,6 +334,11 @@ Für ein externes Modell muss die Datei neben `index.html` liegen und über
 denselben lokalen Server erreichbar sein. Der Ordnername `models/` ist nur ein
 Beispiel.
 
+`assets/scene.glb` ist bewusst **nicht** `externalModelUrl`: Diese Datei ist
+die Umgebung (Tisch, Hintergrund, kleine Kerzen) und wird separat über
+`CONFIG.environment.url` geladen. Der Kerzen-Loader und der
+Umgebungs-Loader teilen sich nur den `GLTFLoader`.
+
 **Tipp:** Für ein neues Wort genügt `CONFIG.word`. Großbuchstaben sind
 empfohlen, weil dann alle Dochte auf derselben Höhe sitzen und die elf
 Flammen eine ruhige Reihe bilden. Kleinschreibung funktioniert ebenfalls; die
@@ -373,11 +384,14 @@ Alle relevanten Systeme benutzen ausschließlich diesen Wert:
 - Staub, Kamera, Lichter und Deko
 
 Wenn die Kerze in die Szene eines Partners gesetzt werden soll, reicht es,
-`CONFIG.tableY` auf die dortige Tischhöhe zu setzen. Die dekorative Umgebung
-(Tischplatte, Läufer, Kugeln, Zweig, Hintergrund) liegt in
-`setupEnvironment()` und kann entfernt werden, ohne die Simulation zu
-beeinflussen. Die Pfützenplatte bleibt als flache, halbtransparente Fläche bei
-`tableY`, damit die Pfützen weiterhin auf dem Tisch liegen.
+`CONFIG.tableY` auf die dortige Tischhöhe zu setzen. Die Umgebung wird aus
+`assets/scene.glb` geladen und in `environmentScene.js` automatisch so skaliert
+und verschoben, dass ihre Tischoberkante genau auf `CONFIG.tableY` liegt. Die
+prozedurale Tischplatte und Hintergrundwand in `setupEnvironment()` sind nur
+noch der Fallback, falls die GLB-Datei fehlt; Läufer, Kugeln, Zweig, Staub und
+Bokeh bleiben in beiden Fällen erhalten. Die Pfützenplatte bleibt als flache,
+halbtransparente Fläche bei `tableY`, damit die Pfützen weiterhin auf dem Tisch
+liegen.
 
 **Wichtig:** Die Szene arbeitet in Weltunits. Ein Buchstabe ist etwa `0.9`
 Einheiten hoch, der Tisch steht bei `y = 0`. Der Partner sollte die Kerze
@@ -437,9 +451,10 @@ Diese Punkte sind wichtig für die Verteidigung der Arbeit:
 4. **Die Kamera ist statisch.** Die Aufgabe verlangt ein Environment und
    Kräfte; eine bewegte Kamera würde die Lesbarkeit der feinen Wachsbewegung
    verschlechtern.
-5. **Keine externen Bilddateien.** Holz, Stoff, Flamme, Rauch und Hintergrund
-   sind Canvas-Texturen. Das hält die Abgabe klein und macht die Herkunft
-   jedes Pixels nachvollziehbar.
+5. **Die Deko-Texturen sind prozedural.** Holz, Stoff, Flamme und Rauch sind
+   Canvas-Texturen. Nur die Umgebung ist eine Blender-Datei
+   (`assets/scene.glb`) mit eingebetteter Hintergrundtextur; dadurch bleiben
+   Tisch und Hintergrund trotzdem in wenigen Dateien.
 
 ---
 
@@ -466,9 +481,9 @@ Diese Punkte sind wichtig für die Verteidigung der Arbeit:
 - Canvas 2D `globalCompositeOperation = 'lighter'`:
   <https://developer.mozilla.org/en-US/docs/Web/API/CanvasRenderingContext2D/globalCompositeOperation>
 
-Die Umsetzung, alle Formeln und alle Texturen sind eigenständig aus diesen
-Grundlagen abgeleitet. Es werden keine fertigen Shader, Partikelbibliotheken
-oder Physik-Engines verwendet.
+Die Umsetzung, alle Formeln und die prozeduralen Texturen sind eigenständig aus
+diesen Grundlagen abgeleitet. Es werden keine fertigen Shader,
+Partikelbibliotheken oder Physik-Engines verwendet.
 
 ---
 
@@ -476,12 +491,15 @@ oder Physik-Engines verwendet.
 
 ```
 ha4/ha3/
-├── index.html    HTML, CSS und Import Map (kein Inline-JavaScript)
-├── sketch.js     p5.js-konformer Einstiegspunkt: nur setup() und draw()
-├── js/           ES-Module der Szene
-├── README.md     diese Dokumentation
-└── scene.blend   optionale Blender-Datei, wird von index.html nicht geladen
+├── index.html          HTML, CSS und Import Map (kein Inline-JavaScript)
+├── sketch.js           p5.js-konformer Einstiegspunkt: nur setup() und draw()
+├── assets/
+│   └── scene.glb       Blender-Umgebung: Tisch, Hintergrund, kleine Kerzen
+├── js/                 ES-Module der Szene
+├── README.md           diese Dokumentation
+└── scene.blend         optionale Blender-Quelldatei, wird nicht geladen
 ```
 
-`scene.blend` ist nicht Teil der Laufzeit. Wenn sie nicht zur Abgabe gehört,
-kann sie beim Zippen weggelassen werden.
+`scene.blend` ist die bearbeitbare Quelle der Umgebung und nicht Teil der
+Laufzeit. Für die Abgabe genügt `assets/scene.glb`; die `.blend`-Datei kann
+beim Zippen weggelassen werden.

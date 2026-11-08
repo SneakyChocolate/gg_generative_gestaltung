@@ -10,9 +10,12 @@ import {
   fitCamera,
   setupLights,
   setupEnvironment,
+  setProceduralBaseVisible,
+  fitRunnerToTable,
   updateDust,
   updateBokeh,
 } from './environment.js';
+import { loadEnvironmentScene } from './environmentScene.js';
 import { loadModel } from './model.js';
 import { initSmoke, updateSmoke } from './systems/smoke.js';
 import { DropletSystem } from './systems/droplets.js';
@@ -209,6 +212,22 @@ export async function init() {
     state.wicks = model.wicks;
     scene.add(model.group);
     model.group.position.y = CONFIG.tableY;
+
+    // Die GLB-Umgebung liefert Tisch und Hintergrund. Schlaegt das Laden
+    // fehl, bleibt die prozedurale Umgebung sichtbar und die Szene laeuft.
+    loaderText.textContent = 'Umgebung wird geladen …';
+    try {
+      const environment = await loadEnvironmentScene(model.width);
+      if (environment) {
+        setProceduralBaseVisible(false);
+        fitRunnerToTable(environment.tableSize.x, environment.tableSize.z);
+      }
+    } catch (error) {
+      console.warn(
+        'GLB-Umgebung konnte nicht geladen werden; prozedurale Umgebung bleibt aktiv.',
+        error,
+      );
+    }
 
     state.puddles = new PuddleSystem();
     state.puddles.configureBounds(model.width);

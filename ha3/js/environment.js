@@ -9,6 +9,10 @@ import { rand } from './utils.js';
 
 // Kamera, Licht, Tisch und die dekorative Umgebung.
 
+let backdrop;
+let table;
+let runner;
+
 export function fitCamera(wordWidth) {
   const aspect = window.innerWidth / window.innerHeight;
   camera.aspect = aspect;
@@ -78,7 +82,7 @@ export function setupEnvironment() {
   pmrem.dispose();
 
   // Hintergrundwand.
-  const backdrop = new THREE.Mesh(
+  backdrop = new THREE.Mesh(
     new THREE.PlaneGeometry(46, 24),
     new THREE.MeshBasicMaterial({ map: textures.backdrop, fog: false }),
   );
@@ -86,7 +90,7 @@ export function setupEnvironment() {
   scene.add(backdrop);
 
   // Tischplatte. TABLE: Die Kollisionsebene ist CONFIG.tableY.
-  const table = new THREE.Mesh(
+  table = new THREE.Mesh(
     new THREE.PlaneGeometry(32, 18),
     materials.table,
   );
@@ -96,7 +100,7 @@ export function setupEnvironment() {
   scene.add(table);
 
   // Dunkelgruener Laeufer unter dem Wort.
-  const runner = new THREE.Mesh(
+  runner = new THREE.Mesh(
     new THREE.PlaneGeometry(13.5, 3.9),
     materials.runner,
   );
@@ -113,6 +117,22 @@ export function setupEnvironment() {
   // Staub in der Luft: kleine warme Punkte, die langsam treiben.
   createDust();
   createBokeh();
+}
+
+// Wird aufgerufen, wenn assets/scene.glb erfolgreich geladen wurde: Die
+// prozedurale Tischplatte und die Hintergrundwand werden ausgeblendet, damit
+// sie nicht mit der GLB-Umgebung kollidieren. Laeufer und Deko bleiben.
+export function setProceduralBaseVisible(visible) {
+  if (table) table.visible = visible;
+  if (backdrop) backdrop.visible = visible;
+}
+
+// Passt den Laeufer an die Groesse der GLB-Tischplatte an. Die Geometrie ist
+// 13,5 x 3,9 Einheiten gross; die Textur wird dabei leicht gestreckt.
+export function fitRunnerToTable(tableWidth, tableDepth) {
+  if (!runner) return;
+  runner.scale.x = Math.min(1, (tableWidth * 0.92) / 13.5);
+  runner.scale.y = Math.min(1, (tableDepth * 0.5) / 3.9);
 }
 
 export function addBauble(x, z, radius, material) {
