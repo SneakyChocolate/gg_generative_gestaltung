@@ -40,6 +40,8 @@ const ORBIT_SPIN_DRAG = 0.8;
 const ORBIT_GRAVITY_SCALE = 0.15;
 const SALVO_SIZE = 3;
 const SALVO_SPREAD = 3.5;
+const LAUNCH_X_SPREAD = 50;
+const LAUNCH_Z = [100, 120];
 
 export const ORBIT_STRIDE = 13;
 export const ROCKET_STRIDE = 2;
@@ -212,15 +214,15 @@ function spawnRocket(rockets, x, z, vx, vy, vz, kind, hue) {
 export function launchRocket(rockets) {
   spawnRocket(
     rockets,
-    randFloatSpread(160), -randFloat(70, 150),
+    randFloatSpread(LAUNCH_X_SPREAD), -randFloat(...LAUNCH_Z),
     randFloatSpread(6), randFloat(35, 48), randFloatSpread(6),
     LAUNCH_KINDS[Math.floor(Math.random() * LAUNCH_KINDS.length)], RANDOM_HUE
   );
 }
 
 export function launchSalvo(rockets) {
-  const x = randFloatSpread(160);
-  const z = -randFloat(70, 150);
+  const x = randFloatSpread(LAUNCH_X_SPREAD);
+  const z = -randFloat(...LAUNCH_Z);
   const vy = randFloat(38, 46);
   const hue = Math.random();
   const phase = Math.random() * Math.PI * 2;

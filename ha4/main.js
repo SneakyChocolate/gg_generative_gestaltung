@@ -4,6 +4,7 @@ import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { AfterimagePass } from 'three/addons/postprocessing/AfterimagePass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { noisePotential3D } from './curlnoise.js';
 import { ParticlePool, ORBIT_STRIDE, ROCKET_STRIDE, launchRocket, launchSalvo, updateRockets, updateSparks, updateOrbits, updateSmoke } from './firework.js';
 
@@ -88,6 +89,12 @@ const ground = new THREE.Mesh(
 );
 ground.rotation.x = -Math.PI / 2;
 scene.add(ground);
+
+scene.add(new THREE.AmbientLight(0x404050, 1));
+const moon = new THREE.DirectionalLight(0x9db4ff, 2);
+moon.position.set(-200, 80, -40);
+scene.add(moon);
+new GLTFLoader().load('./assets/city.glb', gltf => scene.add(gltf.scene));
 
 const dot = softDotTexture();
 function pointsMaterial(size, blending, map = dot) {
