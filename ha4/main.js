@@ -114,7 +114,7 @@ scene.add(smoke.points, sparks.points, hearts.points, stars.points, orbits.point
 const composer = new EffectComposer(renderer);
 composer.addPass(new RenderPass(scene, camera));
 composer.addPass(new AfterimagePass(TRAIL_DAMP));
-composer.addPass(new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 1.2, 0.6, 0.1));
+composer.addPass(new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 1.2, 0.1, 0.1));
 composer.addPass(new OutputPass());
 
 window.addEventListener('resize', () => {
