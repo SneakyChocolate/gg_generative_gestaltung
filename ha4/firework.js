@@ -11,6 +11,9 @@ const FLOW_STRENGTH = 150;
 const SMOKE_FLOW_STRENGTH = 400;
 const SMOKE_RISE = 1.5;
 const SMOKE_ALPHA = 0.08;
+const SMOKE_FADE_IN_SPEED = 8;
+const ROCKET_SMOKE_GRAY = 0.15;
+const SPARK_SMOKE_TINT = 0.3;
 const SMOKE_CHANCE_PER_SECOND = 3;
 const ROCKET_SMOKE_PER_SECOND = 60;
 const SPARK_COUNT = 150;
@@ -75,6 +78,12 @@ export class ParticlePool {
     this.color[i * 4 + 3] = scale * this.life[i] / this.maxLife[i];
   }
 
+  fadeInOut(i, scale) {
+    const remaining = this.life[i] / this.maxLife[i];
+    const fadeIn = Math.min((1 - remaining) * SMOKE_FADE_IN_SPEED, 1);
+    this.color[i * 4 + 3] = scale * fadeIn * remaining * remaining;
+  }
+
   upload() {
     this.geometry.setDrawRange(0, this.count);
     this.geometry.attributes.position.needsUpdate = true;
@@ -82,9 +91,9 @@ export class ParticlePool {
   }
 }
 
-function emitSmoke(smoke, x, y, z) {
+function emitSmoke(smoke, x, y, z, r, g, b) {
   dir.randomDirection().multiplyScalar(randFloat(0.5, 2));
-  smoke.spawn(x, y, z, dir.x, dir.y, dir.z, randFloat(2.5, 4), 0.6, 0.6, 0.6, SMOKE_ALPHA);
+  smoke.spawn(x, y, z, dir.x, dir.y, dir.z, randFloat(2.5, 4), r, g, b, 0);
 }
 
 function explode(sparks, x, y, z) {
@@ -108,7 +117,7 @@ export function updateRockets(rockets, sparks, smoke, dt) {
   for (let i = rockets.count - 1; i >= 0; i--) {
     rockets.step(i, 0, GRAVITY, 0, 1, dt);
     const k = i * 3;
-    if (Math.random() < ROCKET_SMOKE_PER_SECOND * dt) emitSmoke(smoke, pos[k], pos[k + 1], pos[k + 2]);
+    if (Math.random() < ROCKET_SMOKE_PER_SECOND * dt) emitSmoke(smoke, pos[k], pos[k + 1], pos[k + 2], ROCKET_SMOKE_GRAY, ROCKET_SMOKE_GRAY, ROCKET_SMOKE_GRAY);
     if (vel[k + 1] <= 0) {
       explode(sparks, pos[k], pos[k + 1], pos[k + 2]);
       rockets.kill(i);
@@ -117,13 +126,16 @@ export function updateRockets(rockets, sparks, smoke, dt) {
 }
 
 export function updateSparks(sparks, smoke, flow, dt) {
-  const { pos } = sparks;
+  const { pos, color } = sparks;
   const damp = Math.pow(sparks.drag, dt);
   for (let i = sparks.count - 1; i >= 0; i--) {
     const k = i * 3;
     curl3D(flow, pos[k], pos[k + 1], pos[k + 2], flowForce);
     const alive = sparks.step(i, flowForce.x * FLOW_STRENGTH, GRAVITY + flowForce.y * FLOW_STRENGTH, flowForce.z * FLOW_STRENGTH, damp, dt);
-    if (Math.random() < SMOKE_CHANCE_PER_SECOND * dt) emitSmoke(smoke, pos[k], pos[k + 1], pos[k + 2]);
+    if (Math.random() < SMOKE_CHANCE_PER_SECOND * dt) {
+      const c = i * 4;
+      emitSmoke(smoke, pos[k], pos[k + 1], pos[k + 2], color[c] * SPARK_SMOKE_TINT, color[c + 1] * SPARK_SMOKE_TINT, color[c + 2] * SPARK_SMOKE_TINT);
+    }
     if (alive) sparks.fade(i, 1);
     else sparks.kill(i);
   }
@@ -136,7 +148,7 @@ export function updateSmoke(smoke, flow, dt) {
     const k = i * 3;
     curl3D(flow, pos[k], pos[k + 1], pos[k + 2], flowForce);
     const alive = smoke.step(i, flowForce.x * SMOKE_FLOW_STRENGTH, SMOKE_RISE + flowForce.y * SMOKE_FLOW_STRENGTH, flowForce.z * SMOKE_FLOW_STRENGTH, damp, dt);
-    if (alive) smoke.fade(i, SMOKE_ALPHA);
+    if (alive) smoke.fadeInOut(i, SMOKE_ALPHA);
     else smoke.kill(i);
   }
 }
