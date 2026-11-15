@@ -339,7 +339,7 @@ export class CandlePart {
     // 4) Schmelzweg glaetten: Ein heisser Vertex zieht seine Nachbarn
     //    mit nach unten, statt einen einzelnen Stachel zu bilden.
     this.sagScratch.set(sag);
-    const sagSpread = Math.min(0.4, CONFIG.heat.flow * dt);
+    const sagSpread = Math.min(0.3, CONFIG.heat.flow * dt);
     for (let u = 0; u < count; u++) {
       const heat = temps[u];
       if (heat < 0.18) continue;
@@ -389,9 +389,9 @@ export class CandlePart {
 
     // 7) Fluid-Relaxation: heisse Bereiche gleiten leicht uebereinander.
     //    Das nimmt den harten "Lego"-Eindruck aus der Oberflaeche.
-    const flow = Math.min(0.12, CONFIG.heat.flow * dt);
+    const flow = Math.min(0.1, CONFIG.heat.flow * dt);
     for (let u = 0; u < count; u++) {
-      const weight = smoothstep(0.3, 0.9, temps[u]);
+      const weight = smoothstep(0.18, 0.7, temps[u]);
       if (weight <= 0) continue;
       const start = this.neighborStart[u];
       const end = this.neighborStart[u + 1];

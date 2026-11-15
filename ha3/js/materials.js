@@ -12,10 +12,10 @@ export const materials = {
     clearcoat: 0.08,
     clearcoatRoughness: 0.8,
     sheen: 0.45,
-    sheenColor: new THREE.Color(0xffd6a0),
+    sheenColor: new THREE.Color(0xff8a80),
     sheenRoughness: 0.62,
     envMapIntensity: 0.45,
-    emissive: new THREE.Color(0x180902),
+    emissive: new THREE.Color(0x200404),
     emissiveIntensity: 0.55,
     // Nach dem echten Schnitt sind alle Bruchflaechen gecappt. FrontSide
     // verhindert, dass man durch offene Stellen ins Mesh-Innere sieht.

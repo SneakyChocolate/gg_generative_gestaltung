@@ -137,8 +137,8 @@ export class Wick {
 
     // Flackern aus drei Sinuswellen: langsame Unruhe + schnelle Zuckung.
     const flicker = 0.88 +
-      Math.sin(time * 12.7 + this.seed) * 0.075 +
-      Math.sin(time * 27.3 + this.seed * 1.7) * 0.045 +
+      Math.sin(time * 12.7 + this.seed) * 0.05 +
+      Math.sin(time * 27.3 + this.seed * 1.7) * 0.015 +
       Math.sin(time * 6.1 + this.seed * 0.37) * 0.035;
 
     const sway = state.wind.x * CONFIG.wind.flameSway +
