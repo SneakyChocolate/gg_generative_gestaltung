@@ -41,8 +41,8 @@ const ORBIT_SPIN_DRAG = 0.8;
 const ORBIT_GRAVITY_SCALE = 0.15;
 const SALVO_SIZE = 3;
 const SALVO_SPREAD = 3.5;
-const LAUNCH_X_SPREAD = 50;
-const LAUNCH_Z = [100, 120];
+const LAUNCH_X_SPREAD = 500;
+const LAUNCH_Z = [80, 450];
 
 export const ORBIT_STRIDE = 13;
 export const ROCKET_STRIDE = 2;

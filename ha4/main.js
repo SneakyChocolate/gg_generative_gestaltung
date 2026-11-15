@@ -9,8 +9,9 @@ import { noisePotential3D } from './curlnoise.js';
 import { ParticlePool, ORBIT_STRIDE, ROCKET_STRIDE, launchRocket, launchSalvo, updateRockets, updateSparks, updateOrbits, updateSmoke } from './firework.js';
 
 const EYE_HEIGHT = 1.7;
-const LOOK_UP_DEG = 30;
-const FOV = 75;
+const LOOK_UP_DEG =6;
+const LOOK_RIGHT_DEG = 12;
+const FOV = 100;
 const LAUNCHES_PER_SECOND = 1.5;
 const SALVO_SHARE = 0.25;
 const FLOW_SCALE = 0.02;
@@ -78,16 +79,43 @@ document.body.appendChild(renderer.domElement);
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x000004);
+scene.fog = new THREE.Fog(0x000004, 80, 600);
 
 const camera = new THREE.PerspectiveCamera(FOV, window.innerWidth / window.innerHeight, 0.1, 2000);
-camera.position.set(0, EYE_HEIGHT, 0);
+camera.position.set(75, EYE_HEIGHT, 60);
+camera.rotation.order = 'YXZ';
 camera.rotation.x = THREE.MathUtils.degToRad(LOOK_UP_DEG);
+camera.rotation.y = THREE.MathUtils.degToRad(LOOK_RIGHT_DEG);
+
+const debugPanel = document.createElement('pre');
+debugPanel.style.cssText = 'position:fixed;top:8px;left:8px;margin:0;padding:8px 12px;color:#9f9;background:rgba(0,0,0,0.6);font:14px monospace;display:none;pointer-events:none';
+document.body.appendChild(debugPanel);
+
+function updateDebugPanel() {
+  const [x, y, z] = ['x', 'y', 'z'].map(axis => THREE.MathUtils.radToDeg(camera.rotation[axis]).toFixed(1).padStart(7));
+  debugPanel.textContent = `camera rotation (deg)\nX (pitch): ${x}\nY (yaw):   ${y}\nZ (roll):  ${z}`;
+}
+
+window.addEventListener('keydown', event => {
+  if (event.key.toLowerCase() === 'd') debugPanel.style.display = debugPanel.style.display === 'none' ? 'block' : 'none';
+});
+
+const DRAG_SENSITIVITY = 0.003;
+const MAX_PITCH = Math.PI / 2;
+renderer.domElement.style.cursor = 'grab';
+renderer.domElement.addEventListener('pointerdown', event => renderer.domElement.setPointerCapture(event.pointerId));
+renderer.domElement.addEventListener('pointermove', event => {
+  if (!renderer.domElement.hasPointerCapture(event.pointerId)) return;
+  camera.rotation.y += event.movementX * DRAG_SENSITIVITY;
+  camera.rotation.x = THREE.MathUtils.clamp(camera.rotation.x + event.movementY * DRAG_SENSITIVITY, -MAX_PITCH, MAX_PITCH);
+});
 
 const ground = new THREE.Mesh(
   new THREE.PlaneGeometry(4000, 4000),
   new THREE.MeshBasicMaterial({ color: 0x050608 })
 );
 ground.rotation.x = -Math.PI / 2;
+ground.position.y = -11;
 scene.add(ground);
 
 scene.add(new THREE.AmbientLight(0x404050, 1));
@@ -114,7 +142,7 @@ scene.add(smoke.points, sparks.points, hearts.points, stars.points, orbits.point
 const composer = new EffectComposer(renderer);
 composer.addPass(new RenderPass(scene, camera));
 composer.addPass(new AfterimagePass(TRAIL_DAMP));
-composer.addPass(new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 1.2, 0.6, 0.1));
+composer.addPass(new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 1.2, 0.1, 0.1));
 composer.addPass(new OutputPass());
 
 window.addEventListener('resize', () => {
@@ -138,5 +166,6 @@ renderer.setAnimationLoop(() => {
   updateSmoke(smoke, flow, dt);
   for (const pool of [rockets, ...shapePools, orbits, smoke]) pool.upload();
 
+  if (debugPanel.style.display !== 'none') updateDebugPanel();
   composer.render();
 });
