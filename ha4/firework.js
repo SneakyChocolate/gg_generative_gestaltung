@@ -1,132 +1,142 @@
 // Basis: Daniel Shiffman, Coding Challenge 27 "Fireworks"
 // http://codingtra.in
 // https://youtu.be/CKeyIbT3vXI
-// Portiert nach three.js (3D, Einheiten in Metern und Sekunden).
+// Portiert nach three.js (3D, Meter und Sekunden), datenorientiert als Struct of Arrays.
 
 import * as THREE from 'three';
 import { curl3D } from './curlnoise.js';
 
-const GRAVITY = new THREE.Vector3(0, -9.81, 0);
+const GRAVITY = -9.81;
 const FLOW_STRENGTH = 150;
 const SMOKE_FLOW_STRENGTH = 400;
 const SMOKE_RISE = 1.5;
-const SMOKE_CHANCE = 0.05;
+const SMOKE_ALPHA = 0.08;
+const SMOKE_CHANCE_PER_SECOND = 3;
 const ROCKET_SMOKE_PER_SECOND = 60;
 const SPARK_COUNT = 150;
-const SPARK_DRAG = 0.05;
-const SMOKE_DRAG = 0.05;
 
 const flowForce = new THREE.Vector3();
-const acc = new THREE.Vector3();
 const color = new THREE.Color();
+const dir = new THREE.Vector3();
+const { randFloat, randFloatSpread } = THREE.MathUtils;
 
-class Particle {
-  constructor(pos, vel, life, drag) {
-    this.pos = pos.clone();
-    this.vel = vel;
-    this.life = life;
-    this.maxLife = life;
+export class ParticlePool {
+  constructor(max, drag, material) {
+    this.max = max;
     this.drag = drag;
+    this.count = 0;
+    this.pos = new Float32Array(max * 3);
+    this.vel = new Float32Array(max * 3);
+    this.life = new Float32Array(max);
+    this.maxLife = new Float32Array(max);
+    this.color = new Float32Array(max * 4);
+
+    this.geometry = new THREE.BufferGeometry();
+    this.geometry.setAttribute('position', new THREE.BufferAttribute(this.pos, 3).setUsage(THREE.DynamicDrawUsage));
+    this.geometry.setAttribute('color', new THREE.BufferAttribute(this.color, 4).setUsage(THREE.DynamicDrawUsage));
+    this.points = new THREE.Points(this.geometry, material);
+    this.points.frustumCulled = false;
   }
 
-  update(dt, force) {
-    this.vel.addScaledVector(force, dt);
-    this.vel.multiplyScalar(Math.pow(this.drag, dt));
-    this.pos.addScaledVector(this.vel, dt);
-    this.life -= dt;
+  spawn(x, y, z, vx, vy, vz, life, r, g, b, a) {
+    if (this.count >= this.max) return;
+    const i = this.count++;
+    this.pos.set([x, y, z], i * 3);
+    this.vel.set([vx, vy, vz], i * 3);
+    this.life[i] = life;
+    this.maxLife[i] = life;
+    this.color.set([r, g, b, a], i * 4);
   }
 
-  done() {
-    return this.life <= 0;
+  kill(i) {
+    const last = --this.count;
+    if (i === last) return;
+    this.pos.copyWithin(i * 3, last * 3, last * 3 + 3);
+    this.vel.copyWithin(i * 3, last * 3, last * 3 + 3);
+    this.color.copyWithin(i * 4, last * 4, last * 4 + 4);
+    this.life[i] = this.life[last];
+    this.maxLife[i] = this.maxLife[last];
   }
 
-  get alpha() {
-    return Math.max(this.life / this.maxLife, 0);
+  step(i, ax, ay, az, damp, dt) {
+    const k = i * 3;
+    const { pos, vel } = this;
+    vel[k] = (vel[k] + ax * dt) * damp;
+    vel[k + 1] = (vel[k + 1] + ay * dt) * damp;
+    vel[k + 2] = (vel[k + 2] + az * dt) * damp;
+    pos[k] += vel[k] * dt;
+    pos[k + 1] += vel[k + 1] * dt;
+    pos[k + 2] += vel[k + 2] * dt;
+    this.life[i] -= dt;
+    return this.life[i] > 0;
+  }
+
+  fade(i, scale) {
+    this.color[i * 4 + 3] = scale * this.life[i] / this.maxLife[i];
+  }
+
+  upload() {
+    this.geometry.setDrawRange(0, this.count);
+    this.geometry.attributes.position.needsUpdate = true;
+    this.geometry.attributes.color.needsUpdate = true;
   }
 }
 
-function randomOnSphere() {
-  return new THREE.Vector3().randomDirection();
+function emitSmoke(smoke, x, y, z) {
+  dir.randomDirection().multiplyScalar(randFloat(0.5, 2));
+  smoke.spawn(x, y, z, dir.x, dir.y, dir.z, randFloat(2.5, 4), 0.6, 0.6, 0.6, SMOKE_ALPHA);
 }
 
-export class Firework {
-  constructor() {
-    this.hu = Math.random();
-    const start = new THREE.Vector3(
-      THREE.MathUtils.randFloatSpread(160),
-      0,
-      -THREE.MathUtils.randFloat(70, 150)
-    );
-    const vel = new THREE.Vector3(
-      THREE.MathUtils.randFloatSpread(6),
-      THREE.MathUtils.randFloat(35, 48),
-      THREE.MathUtils.randFloatSpread(6)
-    );
-    this.rocket = new Particle(start, vel, Infinity, 1);
-    this.exploded = false;
-    this.particles = [];
-    this.smoke = [];
+function explode(sparks, x, y, z) {
+  color.setHSL(Math.random(), 1, 0.6);
+  for (let n = 0; n < SPARK_COUNT; n++) {
+    dir.randomDirection().multiplyScalar(randFloat(20, 60));
+    sparks.spawn(x, y, z, dir.x, dir.y, dir.z, randFloat(1.5, 2.5), color.r, color.g, color.b, 1);
   }
+}
 
-  done() {
-    return this.exploded && this.particles.length === 0 && this.smoke.length === 0;
-  }
+export function launchRocket(rockets) {
+  rockets.spawn(
+    randFloatSpread(160), 0, -randFloat(70, 150),
+    randFloatSpread(6), randFloat(35, 48), randFloatSpread(6),
+    Infinity, 1, 0.9, 0.7, 1
+  );
+}
 
-  addSmoke(pos) {
-    const vel = randomOnSphere().multiplyScalar(THREE.MathUtils.randFloat(0.5, 2));
-    this.smoke.push(new Particle(pos, vel, THREE.MathUtils.randFloat(2.5, 4), SMOKE_DRAG));
-  }
-
-  update(dt, flow) {
-    if (!this.exploded) {
-      this.rocket.update(dt, GRAVITY);
-      if (Math.random() < ROCKET_SMOKE_PER_SECOND * dt) this.addSmoke(this.rocket.pos);
-
-      if (this.rocket.vel.y <= 0) {
-        this.exploded = true;
-        this.explode();
-      }
-    }
-
-    for (let i = this.particles.length - 1; i >= 0; i--) {
-      const p = this.particles[i];
-      curl3D(flow, p.pos.x, p.pos.y, p.pos.z, flowForce);
-      acc.copy(GRAVITY).addScaledVector(flowForce, FLOW_STRENGTH);
-      p.update(dt, acc);
-
-      if (Math.random() < SMOKE_CHANCE * 60 * dt) this.addSmoke(p.pos);
-      if (p.done()) this.particles.splice(i, 1);
-    }
-
-    for (let i = this.smoke.length - 1; i >= 0; i--) {
-      const s = this.smoke[i];
-      curl3D(flow, s.pos.x, s.pos.y, s.pos.z, flowForce);
-      acc.copy(flowForce).multiplyScalar(SMOKE_FLOW_STRENGTH);
-      acc.y += SMOKE_RISE;
-      s.update(dt, acc);
-      if (s.done()) this.smoke.splice(i, 1);
+export function updateRockets(rockets, sparks, smoke, dt) {
+  const { pos, vel } = rockets;
+  for (let i = rockets.count - 1; i >= 0; i--) {
+    rockets.step(i, 0, GRAVITY, 0, 1, dt);
+    const k = i * 3;
+    if (Math.random() < ROCKET_SMOKE_PER_SECOND * dt) emitSmoke(smoke, pos[k], pos[k + 1], pos[k + 2]);
+    if (vel[k + 1] <= 0) {
+      explode(sparks, pos[k], pos[k + 1], pos[k + 2]);
+      rockets.kill(i);
     }
   }
+}
 
-  explode() {
-    for (let i = 0; i < SPARK_COUNT; i++) {
-      const vel = randomOnSphere().multiplyScalar(THREE.MathUtils.randFloat(20, 60));
-      this.particles.push(new Particle(this.rocket.pos, vel, THREE.MathUtils.randFloat(1.5, 2.5), SPARK_DRAG));
-    }
+export function updateSparks(sparks, smoke, flow, dt) {
+  const { pos } = sparks;
+  const damp = Math.pow(sparks.drag, dt);
+  for (let i = sparks.count - 1; i >= 0; i--) {
+    const k = i * 3;
+    curl3D(flow, pos[k], pos[k + 1], pos[k + 2], flowForce);
+    const alive = sparks.step(i, flowForce.x * FLOW_STRENGTH, GRAVITY + flowForce.y * FLOW_STRENGTH, flowForce.z * FLOW_STRENGTH, damp, dt);
+    if (Math.random() < SMOKE_CHANCE_PER_SECOND * dt) emitSmoke(smoke, pos[k], pos[k + 1], pos[k + 2]);
+    if (alive) sparks.fade(i, 1);
+    else sparks.kill(i);
   }
+}
 
-  show(sparkLayer, smokeLayer) {
-    for (const s of this.smoke) {
-      smokeLayer.push(s.pos, 0.6, 0.6, 0.6, s.alpha * 0.08);
-    }
-
-    if (!this.exploded) {
-      sparkLayer.push(this.rocket.pos, 1, 0.9, 0.7, 1);
-    }
-
-    color.setHSL(this.hu, 1, 0.6);
-    for (const p of this.particles) {
-      sparkLayer.push(p.pos, color.r, color.g, color.b, p.alpha);
-    }
+export function updateSmoke(smoke, flow, dt) {
+  const { pos } = smoke;
+  const damp = Math.pow(smoke.drag, dt);
+  for (let i = smoke.count - 1; i >= 0; i--) {
+    const k = i * 3;
+    curl3D(flow, pos[k], pos[k + 1], pos[k + 2], flowForce);
+    const alive = smoke.step(i, flowForce.x * SMOKE_FLOW_STRENGTH, SMOKE_RISE + flowForce.y * SMOKE_FLOW_STRENGTH, flowForce.z * SMOKE_FLOW_STRENGTH, damp, dt);
+    if (alive) smoke.fade(i, SMOKE_ALPHA);
+    else smoke.kill(i);
   }
 }

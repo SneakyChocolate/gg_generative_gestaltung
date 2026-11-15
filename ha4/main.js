@@ -5,7 +5,7 @@ import { AfterimagePass } from 'three/addons/postprocessing/AfterimagePass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { noisePotential3D } from './curlnoise.js';
-import { Firework } from './firework.js';
+import { ParticlePool, launchRocket, updateRockets, updateSparks, updateSmoke } from './firework.js';
 
 const EYE_HEIGHT = 1.7;
 const LOOK_UP_DEG = 30;
@@ -14,47 +14,11 @@ const LAUNCHES_PER_SECOND = 1.5;
 const FLOW_SCALE = 0.02;
 const FLOW_SPEED = 0.25;
 const TRAIL_DAMP = 0.9;
+const MAX_ROCKETS = 64;
 const MAX_SPARKS = 20000;
 const MAX_SMOKE = 20000;
-
-class ParticleLayer {
-  constructor(max, size, blending, texture) {
-    this.max = max;
-    this.count = 0;
-    this.positions = new Float32Array(max * 3);
-    this.colors = new Float32Array(max * 4);
-    this.geometry = new THREE.BufferGeometry();
-    this.geometry.setAttribute('position', new THREE.BufferAttribute(this.positions, 3).setUsage(THREE.DynamicDrawUsage));
-    this.geometry.setAttribute('color', new THREE.BufferAttribute(this.colors, 4).setUsage(THREE.DynamicDrawUsage));
-    const material = new THREE.PointsMaterial({
-      size,
-      map: texture,
-      vertexColors: true,
-      transparent: true,
-      depthWrite: false,
-      blending,
-    });
-    this.points = new THREE.Points(this.geometry, material);
-    this.points.frustumCulled = false;
-  }
-
-  begin() {
-    this.count = 0;
-  }
-
-  push(pos, r, g, b, a) {
-    if (this.count >= this.max) return;
-    this.positions.set([pos.x, pos.y, pos.z], this.count * 3);
-    this.colors.set([r, g, b, a], this.count * 4);
-    this.count++;
-  }
-
-  end() {
-    this.geometry.setDrawRange(0, this.count);
-    this.geometry.attributes.position.needsUpdate = true;
-    this.geometry.attributes.color.needsUpdate = true;
-  }
-}
+const SPARK_DRAG = 0.05;
+const SMOKE_DRAG = 0.05;
 
 function softDotTexture() {
   const canvas = document.createElement('canvas');
@@ -89,9 +53,14 @@ ground.rotation.x = -Math.PI / 2;
 scene.add(ground);
 
 const dot = softDotTexture();
-const sparks = new ParticleLayer(MAX_SPARKS, 1.2, THREE.AdditiveBlending, dot);
-const smoke = new ParticleLayer(MAX_SMOKE, 4, THREE.NormalBlending, dot);
-scene.add(smoke.points, sparks.points);
+function pointsMaterial(size, blending) {
+  return new THREE.PointsMaterial({ size, map: dot, vertexColors: true, transparent: true, depthWrite: false, blending });
+}
+
+const rockets = new ParticlePool(MAX_ROCKETS, 1, pointsMaterial(2, THREE.AdditiveBlending));
+const sparks = new ParticlePool(MAX_SPARKS, SPARK_DRAG, pointsMaterial(1.2, THREE.AdditiveBlending));
+const smoke = new ParticlePool(MAX_SMOKE, SMOKE_DRAG, pointsMaterial(4, THREE.NormalBlending));
+scene.add(smoke.points, sparks.points, rockets.points);
 
 const composer = new EffectComposer(renderer);
 composer.addPass(new RenderPass(scene, camera));
@@ -106,24 +75,20 @@ window.addEventListener('resize', () => {
   composer.setSize(window.innerWidth, window.innerHeight);
 });
 
-const fireworks = [];
 const clock = new THREE.Clock();
 
 renderer.setAnimationLoop(() => {
   const dt = Math.min(clock.getDelta(), 1 / 30);
   const flow = noisePotential3D(FLOW_SCALE, clock.elapsedTime * FLOW_SPEED);
 
-  if (Math.random() < LAUNCHES_PER_SECOND * dt) fireworks.push(new Firework());
+  if (Math.random() < LAUNCHES_PER_SECOND * dt) launchRocket(rockets);
 
-  sparks.begin();
-  smoke.begin();
-  for (let i = fireworks.length - 1; i >= 0; i--) {
-    fireworks[i].update(dt, flow);
-    fireworks[i].show(sparks, smoke);
-    if (fireworks[i].done()) fireworks.splice(i, 1);
-  }
-  sparks.end();
-  smoke.end();
+  updateRockets(rockets, sparks, smoke, dt);
+  updateSparks(sparks, smoke, flow, dt);
+  updateSmoke(smoke, flow, dt);
+  rockets.upload();
+  sparks.upload();
+  smoke.upload();
 
   composer.render();
 });
