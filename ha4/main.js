@@ -14,6 +14,7 @@ const LOOK_RIGHT_DEG = 12;
 const FOV = 100;
 const LAUNCHES_PER_SECOND = 1.5;
 const SALVO_SHARE = 0.25;
+const FIREWORK_SPEED = 1.5;
 const FLOW_SCALE = 0.02;
 const FLOW_SPEED = 0.25;
 const TRAIL_DAMP = 0.9;
@@ -160,10 +161,11 @@ renderer.setAnimationLoop(() => {
 
   if (Math.random() < LAUNCHES_PER_SECOND * dt) (Math.random() < SALVO_SHARE ? launchSalvo : launchRocket)(rockets);
 
-  updateRockets(rockets, pools, dt);
-  for (const pool of shapePools) updateSparks(pool, smoke, flow, dt);
-  updateOrbits(orbits, smoke, dt);
-  updateSmoke(smoke, flow, dt);
+  const simDt = dt * FIREWORK_SPEED;
+  updateRockets(rockets, pools, simDt);
+  for (const pool of shapePools) updateSparks(pool, smoke, flow, simDt);
+  updateOrbits(orbits, smoke, simDt);
+  updateSmoke(smoke, flow, simDt);
   for (const pool of [rockets, ...shapePools, orbits, smoke]) pool.upload();
 
   if (debugPanel.style.display !== 'none') updateDebugPanel();
