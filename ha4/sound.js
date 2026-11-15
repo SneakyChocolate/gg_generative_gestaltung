@@ -1,5 +1,5 @@
 const SOUND_FILES = ['big_explosion', 'normal_bang'].map((name) => `./sound/${name}.wav`);
-const VOLUME = 0.05;
+const VOLUME = 0.00;
 const PAN_RANGE = 60;
 
 const ctx = new AudioContext();
