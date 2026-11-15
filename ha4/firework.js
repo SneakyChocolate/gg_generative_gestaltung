@@ -72,6 +72,13 @@ const LAUNCH_KINDS = [
   // KIND.SPIRAL,
 ];
 
+const LAUNCH_VY = {
+  [KIND.PEONY]: [32, 38],
+  [KIND.STAR]: [40, 46],
+  [KIND.SPLIT]: [48, 54],
+  [KIND.CASCADE]: [56, 62],
+};
+
 const flowForce = new THREE.Vector3();
 const color = new THREE.Color();
 const dir = new THREE.Vector3();
@@ -242,7 +249,7 @@ export function launchRocket(rockets) {
   spawnRocket(
     rockets,
     randFloatSpread(LAUNCH_X_SPREAD), -randFloat(...LAUNCH_Z),
-    randFloatSpread(6), randFloat(35, 48), randFloatSpread(6),
+    randFloatSpread(6), randFloat(...LAUNCH_VY[kind]), randFloatSpread(6),
     kind, RANDOM_HUE
   );
 }
@@ -250,7 +257,6 @@ export function launchRocket(rockets) {
 export function launchSalvo(rockets) {
   const x = randFloatSpread(LAUNCH_X_SPREAD);
   const z = -randFloat(...LAUNCH_Z);
-  const vy = randFloat(38, 46);
   const hue = Math.random();
   const phase = Math.random() * Math.PI * 2;
   const kinds = [...LAUNCH_KINDS].sort(() => Math.random() - 0.5);
@@ -258,7 +264,7 @@ export function launchSalvo(rockets) {
     const angle = phase + (n / SALVO_SIZE) * Math.PI * 2;
     spawnRocket(
       rockets, x, z,
-      Math.cos(angle) * SALVO_SPREAD, vy, Math.sin(angle) * SALVO_SPREAD,
+      Math.cos(angle) * SALVO_SPREAD, randFloat(...LAUNCH_VY[kinds[n]]), Math.sin(angle) * SALVO_SPREAD,
       kinds[n], (hue + n / SALVO_SIZE) % 1
     );
   }
