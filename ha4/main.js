@@ -9,8 +9,8 @@ import { noisePotential3D } from './curlnoise.js';
 import { ParticlePool, ORBIT_STRIDE, ROCKET_STRIDE, launchRocket, launchSalvo, updateRockets, updateSparks, updateOrbits, updateSmoke } from './firework.js';
 
 const EYE_HEIGHT = 1.7;
-const LOOK_UP_DEG =0;
-const LOOK_RIGHT_DEG = 50;
+const LOOK_UP_DEG =6;
+const LOOK_RIGHT_DEG = 12;
 const FOV = 100;
 const LAUNCHES_PER_SECOND = 1.5;
 const SALVO_SHARE = 0.25;
