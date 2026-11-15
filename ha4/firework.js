@@ -6,6 +6,7 @@
 
 import * as THREE from 'three';
 import { curl3D } from './curlnoise.js';
+import { playExplosion } from './sound.js';
 
 const GRAVITY = -9.81;
 const FLOW_STRENGTH = 150;
@@ -194,6 +195,7 @@ function burstOrbits(orbits, x, y, z, hue) {
 }
 
 function explode(pools, rockets, kind, hue, x, y, z) {
+  playExplosion(x);
   color.setHSL(hue, 1, 0.6);
   if (kind === KIND.PEONY) burstSphere(pools.sparks, x, y, z, SPARK_COUNT, [20, 60]);
   else if (kind === KIND.STAR) burstSphere(pools.stars, x, y, z, STAR_COUNT, [20, 50]);
