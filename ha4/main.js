@@ -5,18 +5,20 @@ import { AfterimagePass } from 'three/addons/postprocessing/AfterimagePass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { noisePotential3D } from './curlnoise.js';
-import { ParticlePool, launchRocket, updateRockets, updateSparks, updateSmoke } from './firework.js';
+import { ParticlePool, ORBIT_STRIDE, ROCKET_STRIDE, launchRocket, launchSalvo, updateRockets, updateSparks, updateOrbits, updateSmoke } from './firework.js';
 
 const EYE_HEIGHT = 1.7;
 const LOOK_UP_DEG = 30;
 const FOV = 75;
 const LAUNCHES_PER_SECOND = 1.5;
+const SALVO_SHARE = 0.25;
 const FLOW_SCALE = 0.02;
 const FLOW_SPEED = 0.25;
 const TRAIL_DAMP = 0.9;
-const MAX_ROCKETS = 64;
+const MAX_ROCKETS = 256;
 const MAX_SPARKS = 20000;
 const MAX_SMOKE = 20000;
+const MAX_SHAPES = 4000;
 const SPARK_DRAG = 0.05;
 const SMOKE_DRAG = 0.05;
 
@@ -31,6 +33,41 @@ function softDotTexture() {
   ctx.fillStyle = gradient;
   ctx.fillRect(0, 0, 64, 64);
   return new THREE.CanvasTexture(canvas);
+}
+
+function shapeTexture(trace) {
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = 64;
+  const ctx = canvas.getContext('2d');
+  ctx.translate(32, 29);
+  ctx.shadowColor = 'white';
+  ctx.shadowBlur = 8;
+  ctx.fillStyle = 'white';
+  ctx.beginPath();
+  trace(ctx);
+  ctx.closePath();
+  ctx.fill();
+  return new THREE.CanvasTexture(canvas);
+}
+
+function heartTexture() {
+  return shapeTexture(ctx => {
+    for (let t = 0; t <= Math.PI * 2; t += 0.1) {
+      const x = 16 * Math.sin(t) ** 3;
+      const y = 13 * Math.cos(t) - 5 * Math.cos(2 * t) - 2 * Math.cos(3 * t) - Math.cos(4 * t);
+      ctx.lineTo(x * 1.4, -y * 1.4);
+    }
+  });
+}
+
+function starTexture() {
+  return shapeTexture(ctx => {
+    for (let n = 0; n < 10; n++) {
+      const angle = -Math.PI / 2 + (n * Math.PI) / 5;
+      const radius = n % 2 ? 11 : 26;
+      ctx.lineTo(Math.cos(angle) * radius, Math.sin(angle) * radius + 3);
+    }
+  });
 }
 
 const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -53,14 +90,19 @@ ground.rotation.x = -Math.PI / 2;
 scene.add(ground);
 
 const dot = softDotTexture();
-function pointsMaterial(size, blending) {
-  return new THREE.PointsMaterial({ size, map: dot, vertexColors: true, transparent: true, depthWrite: false, blending });
+function pointsMaterial(size, blending, map = dot) {
+  return new THREE.PointsMaterial({ size, map, vertexColors: true, transparent: true, depthWrite: false, blending });
 }
 
-const rockets = new ParticlePool(MAX_ROCKETS, 1, pointsMaterial(2, THREE.AdditiveBlending));
+const rockets = new ParticlePool(MAX_ROCKETS, 1, pointsMaterial(2, THREE.AdditiveBlending), ROCKET_STRIDE);
 const sparks = new ParticlePool(MAX_SPARKS, SPARK_DRAG, pointsMaterial(1.2, THREE.AdditiveBlending));
+const hearts = new ParticlePool(MAX_SHAPES, SPARK_DRAG, pointsMaterial(5, THREE.AdditiveBlending, heartTexture()));
+const stars = new ParticlePool(MAX_SHAPES, SPARK_DRAG, pointsMaterial(3.5, THREE.AdditiveBlending, starTexture()));
+const orbits = new ParticlePool(MAX_SHAPES, 1, pointsMaterial(1.6, THREE.AdditiveBlending), ORBIT_STRIDE);
 const smoke = new ParticlePool(MAX_SMOKE, SMOKE_DRAG, pointsMaterial(4, THREE.NormalBlending));
-scene.add(smoke.points, sparks.points, rockets.points);
+const pools = { sparks, hearts, stars, orbits, smoke };
+const shapePools = [sparks, hearts, stars];
+scene.add(smoke.points, sparks.points, hearts.points, stars.points, orbits.points, rockets.points);
 
 const composer = new EffectComposer(renderer);
 composer.addPass(new RenderPass(scene, camera));
@@ -81,14 +123,13 @@ renderer.setAnimationLoop(() => {
   const dt = Math.min(clock.getDelta(), 1 / 30);
   const flow = noisePotential3D(FLOW_SCALE, clock.elapsedTime * FLOW_SPEED);
 
-  if (Math.random() < LAUNCHES_PER_SECOND * dt) launchRocket(rockets);
+  if (Math.random() < LAUNCHES_PER_SECOND * dt) (Math.random() < SALVO_SHARE ? launchSalvo : launchRocket)(rockets);
 
-  updateRockets(rockets, sparks, smoke, dt);
-  updateSparks(sparks, smoke, flow, dt);
+  updateRockets(rockets, pools, dt);
+  for (const pool of shapePools) updateSparks(pool, smoke, flow, dt);
+  updateOrbits(orbits, smoke, dt);
   updateSmoke(smoke, flow, dt);
-  rockets.upload();
-  sparks.upload();
-  smoke.upload();
+  for (const pool of [rockets, ...shapePools, orbits, smoke]) pool.upload();
 
   composer.render();
 });
