@@ -6,6 +6,7 @@ import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js'
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { noisePotential3D } from './curlnoise.js';
+import { createWaterReflection } from './water.js';
 import { ParticlePool, ORBIT_STRIDE, ROCKET_STRIDE, launchRocket, launchSalvo, updateRockets, updateSparks, updateOrbits, updateSmoke } from './firework.js';
 
 const EYE_HEIGHT = 1.7;
@@ -123,7 +124,6 @@ scene.add(new THREE.AmbientLight(0x404050, 1));
 const moon = new THREE.DirectionalLight(0x9db4ff, 2);
 moon.position.set(-200, 80, -40);
 scene.add(moon);
-new GLTFLoader().load('./assets/city.glb', gltf => scene.add(gltf.scene));
 
 const dot = softDotTexture();
 function pointsMaterial(size, blending, map = dot) {
@@ -140,6 +140,12 @@ const pools = { sparks, hearts, stars, orbits, smoke };
 const shapePools = [sparks, hearts, stars];
 scene.add(smoke.points, sparks.points, hearts.points, stars.points, orbits.points, rockets.points);
 
+const water = createWaterReflection(renderer, [rockets, sparks, hearts, stars, orbits], scene.fog);
+new GLTFLoader().load('./assets/city.glb', gltf => {
+  water.setWater(gltf.scene.getObjectByName('water'));
+  scene.add(gltf.scene);
+});
+
 const composer = new EffectComposer(renderer);
 composer.addPass(new RenderPass(scene, camera));
 composer.addPass(new AfterimagePass(TRAIL_DAMP));
@@ -151,6 +157,7 @@ window.addEventListener('resize', () => {
   camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight);
   composer.setSize(window.innerWidth, window.innerHeight);
+  water.resize();
 });
 
 const clock = new THREE.Clock();
@@ -169,5 +176,6 @@ renderer.setAnimationLoop(() => {
   for (const pool of [rockets, ...shapePools, orbits, smoke]) pool.upload();
 
   if (debugPanel.style.display !== 'none') updateDebugPanel();
+  water.render(camera, clock.elapsedTime);
   composer.render();
 });
