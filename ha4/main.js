@@ -28,6 +28,9 @@ const SMOKE_DRAG = 0.05;
 const SKY_LIGHT = 0x3a4a70;
 const GROUND_LIGHT = 0x0a0a12;
 const SKY_INTENSITY = 2;
+const FLASH_LIGHTS = 6;
+const FLASH_INTENSITY = 10000;
+const FLASH_DECAY = 0.6;
 
 function softDotTexture() {
   const canvas = document.createElement('canvas');
@@ -136,7 +139,29 @@ const hearts = new ParticlePool(MAX_SHAPES, SPARK_DRAG, pointsMaterial(5, THREE.
 const stars = new ParticlePool(MAX_SHAPES, SPARK_DRAG, pointsMaterial(3.5, THREE.AdditiveBlending, starTexture()));
 const orbits = new ParticlePool(MAX_SHAPES, 1, pointsMaterial(1.6, THREE.AdditiveBlending), ORBIT_STRIDE);
 const smoke = new ParticlePool(MAX_SMOKE, SMOKE_DRAG, pointsMaterial(4, THREE.NormalBlending));
-const pools = { sparks, hearts, stars, orbits, smoke };
+const flashLights = Array.from({ length: FLASH_LIGHTS }, () => {
+  const light = new THREE.PointLight(0xffffff, 0);
+  scene.add(light);
+  return light;
+});
+const flashAges = new Float32Array(FLASH_LIGHTS).fill(Infinity);
+let nextFlash = 0;
+
+function flash(x, y, z, color) {
+  const n = nextFlash++ % FLASH_LIGHTS;
+  flashLights[n].position.set(x, y, z);
+  flashLights[n].color.copy(color);
+  flashAges[n] = 0;
+}
+
+function updateFlashes(dt) {
+  for (let n = 0; n < FLASH_LIGHTS; n++) {
+    flashAges[n] += dt;
+    flashLights[n].intensity = FLASH_INTENSITY * Math.exp(-flashAges[n] / FLASH_DECAY);
+  }
+}
+
+const pools = { sparks, hearts, stars, orbits, smoke, flash };
 const shapePools = [sparks, hearts, stars];
 scene.add(smoke.points, sparks.points, hearts.points, stars.points, orbits.points, rockets.points);
 
@@ -145,6 +170,7 @@ new GLTFLoader().load('./assets/city.glb', gltf => {
   water.setWater(gltf.scene.getObjectByName('water'));
   gltf.scene.traverse(object => {
     if (object.material?.name === '') object.material.metalness = 0;
+    if (object.material?.name === 'concrete') object.material.roughness = 1;
   });
   scene.add(gltf.scene);
 });
@@ -176,6 +202,7 @@ renderer.setAnimationLoop(() => {
   for (const pool of shapePools) updateSparks(pool, smoke, flow, simDt);
   updateOrbits(orbits, smoke, simDt);
   updateSmoke(smoke, flow, simDt);
+  updateFlashes(simDt);
   for (const pool of [rockets, ...shapePools, orbits, smoke]) pool.upload();
 
   if (debugPanel.style.display !== 'none') updateDebugPanel();

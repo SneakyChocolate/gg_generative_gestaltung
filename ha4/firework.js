@@ -227,6 +227,7 @@ function burstOrbits(orbits, x, y, z, hue) {
 function explode(pools, rockets, kind, hue, x, y, z) {
   playExplosion(x);
   color.setHSL(hue, 1, 0.6);
+  pools.flash(x, y, z, color);
   if (kind === KIND.PEONY) burstSphere(pools.sparks, x, y, z, SPARK_COUNT, [20, 60]);
   else if (kind === KIND.STAR) burstSphere(pools.stars, x, y, z, STAR_COUNT, [20, 50]);
   else if (kind === KIND.HEART) burstHeart(pools.hearts, x, y, z);
@@ -298,6 +299,7 @@ export function updateRockets(rockets, pools, dt) {
       else {
         playExplosion(x);
         color.setHSL(CASCADE_FINAL_HUE, 1, 0.6);
+        pools.flash(x, y, z, color);
         burstSphere(pools.sparks, x, y, z, CASCADE_FINAL_COUNT, CASCADE_FINAL_SPEED);
       }
       rockets.kill(i);
