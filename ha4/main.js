@@ -25,6 +25,9 @@ const MAX_SMOKE = 20000;
 const MAX_SHAPES = 4000;
 const SPARK_DRAG = 0.05;
 const SMOKE_DRAG = 0.05;
+const SKY_LIGHT = 0x3a4a70;
+const GROUND_LIGHT = 0x0a0a12;
+const SKY_INTENSITY = 2;
 
 function softDotTexture() {
   const canvas = document.createElement('canvas');
@@ -120,10 +123,7 @@ ground.rotation.x = -Math.PI / 2;
 ground.position.y = -11;
 scene.add(ground);
 
-scene.add(new THREE.AmbientLight(0x404050, 1));
-const moon = new THREE.DirectionalLight(0x9db4ff, 2);
-moon.position.set(-200, 80, -40);
-scene.add(moon);
+scene.add(new THREE.HemisphereLight(SKY_LIGHT, GROUND_LIGHT, SKY_INTENSITY));
 
 const dot = softDotTexture();
 function pointsMaterial(size, blending, map = dot) {
@@ -143,6 +143,9 @@ scene.add(smoke.points, sparks.points, hearts.points, stars.points, orbits.point
 const water = createWaterReflection(renderer, [rockets, sparks, hearts, stars, orbits], scene.fog);
 new GLTFLoader().load('./assets/city.glb', gltf => {
   water.setWater(gltf.scene.getObjectByName('water'));
+  gltf.scene.traverse(object => {
+    if (object.material?.name === '') object.material.metalness = 0;
+  });
   scene.add(gltf.scene);
 });
 
