@@ -6,6 +6,8 @@ import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js'
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { noisePotential3D } from './curlnoise.js';
+import { createWaterReflection } from './water.js';
+import { updateListener } from './sound.js';
 import { ParticlePool, ORBIT_STRIDE, ROCKET_STRIDE, launchRocket, launchSalvo, updateRockets, updateSparks, updateOrbits, updateSmoke } from './firework.js';
 
 const EYE_HEIGHT = 1.7;
@@ -14,6 +16,7 @@ const LOOK_RIGHT_DEG = 12;
 const FOV = 100;
 const LAUNCHES_PER_SECOND = 1.5;
 const SALVO_SHARE = 0.25;
+const FIREWORK_SPEED = 1.5;
 const FLOW_SCALE = 0.02;
 const FLOW_SPEED = 0.25;
 const TRAIL_DAMP = 0.9;
@@ -23,6 +26,12 @@ const MAX_SMOKE = 20000;
 const MAX_SHAPES = 4000;
 const SPARK_DRAG = 0.05;
 const SMOKE_DRAG = 0.05;
+const SKY_LIGHT = 0x3a4a70;
+const GROUND_LIGHT = 0x0a0a12;
+const SKY_INTENSITY = 2;
+const FLASH_LIGHTS = 6;
+const FLASH_INTENSITY = 10000;
+const FLASH_DECAY = 0.6;
 
 function softDotTexture() {
   const canvas = document.createElement('canvas');
@@ -88,12 +97,12 @@ camera.rotation.x = THREE.MathUtils.degToRad(LOOK_UP_DEG);
 camera.rotation.y = THREE.MathUtils.degToRad(LOOK_RIGHT_DEG);
 
 const debugPanel = document.createElement('pre');
-debugPanel.style.cssText = 'position:fixed;top:8px;left:8px;margin:0;padding:8px 12px;color:#9f9;background:rgba(0,0,0,0.6);font:14px monospace;display:none;pointer-events:none';
+debugPanel.style.cssText = 'position:fixed;top:8px;left:8px;margin:0;padding:8px 12px;color:#fff;background:rgba(0,0,0,0.6);font:14px monospace;display:none;pointer-events:none';
 document.body.appendChild(debugPanel);
 
 function updateDebugPanel() {
   const [x, y, z] = ['x', 'y', 'z'].map(axis => THREE.MathUtils.radToDeg(camera.rotation[axis]).toFixed(1).padStart(7));
-  debugPanel.textContent = `camera rotation (deg)\nX (pitch): ${x}\nY (yaw):   ${y}\nZ (roll):  ${z}`;
+  debugPanel.textContent = `camera rotation\nX: ${x}\nY: ${y}\nZ: ${z}\nfps: ${fps.toFixed(0)}\nparticles: ${[rockets, ...shapePools, orbits, smoke].reduce((sum, pool) => sum + pool.count, 0)}`;
 }
 
 window.addEventListener('keydown', event => {
@@ -118,11 +127,7 @@ ground.rotation.x = -Math.PI / 2;
 ground.position.y = -11;
 scene.add(ground);
 
-scene.add(new THREE.AmbientLight(0x404050, 1));
-const moon = new THREE.DirectionalLight(0x9db4ff, 2);
-moon.position.set(-200, 80, -40);
-scene.add(moon);
-new GLTFLoader().load('./assets/city.glb', gltf => scene.add(gltf.scene));
+scene.add(new THREE.HemisphereLight(SKY_LIGHT, GROUND_LIGHT, SKY_INTENSITY));
 
 const dot = softDotTexture();
 function pointsMaterial(size, blending, map = dot) {
@@ -135,9 +140,41 @@ const hearts = new ParticlePool(MAX_SHAPES, SPARK_DRAG, pointsMaterial(5, THREE.
 const stars = new ParticlePool(MAX_SHAPES, SPARK_DRAG, pointsMaterial(3.5, THREE.AdditiveBlending, starTexture()));
 const orbits = new ParticlePool(MAX_SHAPES, 1, pointsMaterial(1.6, THREE.AdditiveBlending), ORBIT_STRIDE);
 const smoke = new ParticlePool(MAX_SMOKE, SMOKE_DRAG, pointsMaterial(4, THREE.NormalBlending));
-const pools = { sparks, hearts, stars, orbits, smoke };
+const flashLights = Array.from({ length: FLASH_LIGHTS }, () => {
+  const light = new THREE.PointLight(0xffffff, 0);
+  scene.add(light);
+  return light;
+});
+const flashAges = new Float32Array(FLASH_LIGHTS).fill(Infinity);
+let nextFlash = 0;
+
+function flash(x, y, z, color) {
+  const n = nextFlash++ % FLASH_LIGHTS;
+  flashLights[n].position.set(x, y, z);
+  flashLights[n].color.copy(color);
+  flashAges[n] = 0;
+}
+
+function updateFlashes(dt) {
+  for (let n = 0; n < FLASH_LIGHTS; n++) {
+    flashAges[n] += dt;
+    flashLights[n].intensity = FLASH_INTENSITY * Math.exp(-flashAges[n] / FLASH_DECAY);
+  }
+}
+
+const pools = { sparks, hearts, stars, orbits, smoke, flash };
 const shapePools = [sparks, hearts, stars];
 scene.add(smoke.points, sparks.points, hearts.points, stars.points, orbits.points, rockets.points);
+
+const water = createWaterReflection(renderer, [rockets, sparks, hearts, stars, orbits], scene.fog);
+new GLTFLoader().load('./assets/city.glb', gltf => {
+  water.setWater(gltf.scene.getObjectByName('water'));
+  gltf.scene.traverse(object => {
+    if (object.material?.name === '') object.material.metalness = 0;
+    if (object.material?.name === 'concrete') object.material.roughness = 1;
+  });
+  scene.add(gltf.scene);
+});
 
 const composer = new EffectComposer(renderer);
 composer.addPass(new RenderPass(scene, camera));
@@ -150,22 +187,39 @@ window.addEventListener('resize', () => {
   camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight);
   composer.setSize(window.innerWidth, window.innerHeight);
+  water.resize();
 });
 
 const clock = new THREE.Clock();
+const FPS_INTERVAL = 0.2;
+let fps = 0;
+let fpsFrames = 0;
+let fpsTime = 0;
 
 renderer.setAnimationLoop(() => {
-  const dt = Math.min(clock.getDelta(), 1 / 30);
+  const frameTime = clock.getDelta();
+  fpsFrames++;
+  fpsTime += frameTime;
+  if (fpsTime >= FPS_INTERVAL) {
+    fps = fpsFrames / fpsTime;
+    fpsFrames = 0;
+    fpsTime = 0;
+  }
+  const dt = Math.min(frameTime, 1 / 30);
   const flow = noisePotential3D(FLOW_SCALE, clock.elapsedTime * FLOW_SPEED);
 
   if (Math.random() < LAUNCHES_PER_SECOND * dt) (Math.random() < SALVO_SHARE ? launchSalvo : launchRocket)(rockets);
 
-  updateRockets(rockets, pools, dt);
-  for (const pool of shapePools) updateSparks(pool, smoke, flow, dt);
-  updateOrbits(orbits, smoke, dt);
-  updateSmoke(smoke, flow, dt);
+  const simDt = dt * FIREWORK_SPEED;
+  updateRockets(rockets, pools, simDt);
+  for (const pool of shapePools) updateSparks(pool, smoke, flow, simDt);
+  updateOrbits(orbits, smoke, simDt);
+  updateSmoke(smoke, flow, simDt);
+  updateFlashes(simDt);
   for (const pool of [rockets, ...shapePools, orbits, smoke]) pool.upload();
 
   if (debugPanel.style.display !== 'none') updateDebugPanel();
+  updateListener(camera);
+  water.render(camera, clock.elapsedTime);
   composer.render();
 });

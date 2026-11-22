@@ -1,6 +1,9 @@
-const SOUND_FILES = ['big_explosion', 'normal_bang'].map((name) => `./sound/${name}.wav`);
-const VOLUME = 0.05;
-const PAN_RANGE = 60;
+import * as THREE from 'three';
+
+const SOUND_FILES = ['normal_bang'].map((name) => `./sound/${name}.wav`);
+const VOLUME = 0.5;
+const REF_DISTANCE = 30;
+const ROLLOFF = 1.2;
 
 const ctx = new AudioContext();
 const master = ctx.createGain();
@@ -15,13 +18,34 @@ SOUND_FILES.forEach(async (file) => {
 
 let muted = false;
 
-export function playExplosion(x) {
+export function updateListener(camera) {
+  const { listener } = ctx;
+  const forward = camera.getWorldDirection(new THREE.Vector3());
+  listener.positionX.value = camera.position.x;
+  listener.positionY.value = camera.position.y;
+  listener.positionZ.value = camera.position.z;
+  listener.forwardX.value = forward.x;
+  listener.forwardY.value = forward.y;
+  listener.forwardZ.value = forward.z;
+  listener.upX.value = camera.up.x;
+  listener.upY.value = camera.up.y;
+  listener.upZ.value = camera.up.z;
+}
+
+export function playExplosion(x, y, z) {
   if (muted || ctx.state !== 'running' || buffers.length === 0) return;
   const source = ctx.createBufferSource();
   source.buffer = buffers[Math.floor(Math.random() * buffers.length)];
-  const pan = ctx.createStereoPanner();
-  pan.pan.value = Math.max(-1, Math.min(1, x / PAN_RANGE));
-  source.connect(pan).connect(master);
+  const panner = new PannerNode(ctx, {
+    panningModel: 'HRTF',
+    distanceModel: 'inverse',
+    refDistance: REF_DISTANCE,
+    rolloffFactor: ROLLOFF,
+    positionX: x,
+    positionY: y,
+    positionZ: z,
+  });
+  source.connect(panner).connect(master);
   source.start();
 }
 

@@ -39,19 +39,31 @@ const ORBIT_LIFE = 4;
 const ORBIT_GROW_DRAG = 0.3;
 const ORBIT_SPIN_DRAG = 0.8;
 const ORBIT_GRAVITY_SCALE = 0.15;
+const CASCADE_SHARE = 0.12;
+const CASCADE_FIRST = [4, 6];
+const CASCADE_SECOND = [2, 3];
+const CASCADE_SPEED = [45, 70];
+const CASCADE_FUSE = [0.35, 0.5];
+const CASCADE_FLICKER_MIN = 0.2;
+const CASCADE_HUE_STEP = 0.33;
+const CASCADE_FINAL_HUE = 0.12;
+const CASCADE_FINAL_COUNT = 40;
+const CASCADE_FINAL_SPEED = [8, 22];
+const CASCADE_TRAIL_PER_SECOND = 60;
 const SALVO_SIZE = 3;
 const SALVO_SPREAD = 3.5;
 const LAUNCH_X_SPREAD = 500;
 const LAUNCH_Z = [80, 450];
 
 export const ORBIT_STRIDE = 13;
-export const ROCKET_STRIDE = 2;
+export const ROCKET_STRIDE = 3;
 const KIND_SLOT = 0;
 const HUE_SLOT = 1;
+const STAGE_SLOT = 2;
 const RANDOM_HUE = -1;
 const [CX, CY, CZ, UX, UY, UZ, VX, VY, VZ, ANGLE, OMEGA, RADIUS, GROWTH] = Array.from({ length: ORBIT_STRIDE }, (_, n) => n);
 
-export const KIND = { PEONY: 0, HEART: 1, STAR: 2, SPLIT: 3, SPIRAL: 4, CHILD: 5 };
+export const KIND = { PEONY: 0, HEART: 1, STAR: 2, SPLIT: 3, SPIRAL: 4, CHILD: 5, CASCADE: 6, CASCADE_STAGE: 7 };
 const LAUNCH_KINDS = [
   KIND.PEONY,
   // KIND.HEART,
@@ -59,6 +71,13 @@ const LAUNCH_KINDS = [
   KIND.SPLIT,
   // KIND.SPIRAL,
 ];
+
+const LAUNCH_VY = {
+  [KIND.PEONY]: [32, 38],
+  [KIND.STAR]: [40, 46],
+  [KIND.SPLIT]: [48, 54],
+  [KIND.CASCADE]: [56, 62],
+};
 
 const flowForce = new THREE.Vector3();
 const color = new THREE.Color();
@@ -176,6 +195,17 @@ function burstSplit(rockets, x, y, z, hue) {
   }
 }
 
+function burstCascade(rockets, x, y, z, [min, max], hue, stage) {
+  const count = Math.floor(randFloat(min, max + 1));
+  color.setHSL(hue, 1, 0.6);
+  for (let n = 0; n < count; n++) {
+    dir.randomDirection().multiplyScalar(randFloat(...CASCADE_SPEED));
+    const i = rockets.spawn(x, y, z, dir.x, dir.y, dir.z, randFloat(...CASCADE_FUSE), color.r, color.g, color.b, 1);
+    if (i < 0) return;
+    rockets.extra.set([KIND.CASCADE_STAGE, hue, stage], i * ROCKET_STRIDE);
+  }
+}
+
 function burstOrbits(orbits, x, y, z, hue) {
   const { extra } = orbits;
   const growthPerRadius = -Math.log(ORBIT_GROW_DRAG);
@@ -195,12 +225,14 @@ function burstOrbits(orbits, x, y, z, hue) {
 }
 
 function explode(pools, rockets, kind, hue, x, y, z) {
-  playExplosion(x);
+  playExplosion(x, y, z);
   color.setHSL(hue, 1, 0.6);
+  pools.flash(x, y, z, color);
   if (kind === KIND.PEONY) burstSphere(pools.sparks, x, y, z, SPARK_COUNT, [20, 60]);
   else if (kind === KIND.STAR) burstSphere(pools.stars, x, y, z, STAR_COUNT, [20, 50]);
   else if (kind === KIND.HEART) burstHeart(pools.hearts, x, y, z);
   else if (kind === KIND.SPLIT) burstSplit(rockets, x, y, z, hue);
+  else if (kind === KIND.CASCADE) burstCascade(rockets, x, y, z, CASCADE_FIRST, hue, 1);
   else if (kind === KIND.SPIRAL) burstOrbits(pools.orbits, x, y, z, hue);
 }
 
@@ -214,18 +246,18 @@ function spawnRocket(rockets, x, z, vx, vy, vz, kind, hue) {
 }
 
 export function launchRocket(rockets) {
+  const kind = Math.random() < CASCADE_SHARE ? KIND.CASCADE : LAUNCH_KINDS[Math.floor(Math.random() * LAUNCH_KINDS.length)];
   spawnRocket(
     rockets,
     randFloatSpread(LAUNCH_X_SPREAD), -randFloat(...LAUNCH_Z),
-    randFloatSpread(6), randFloat(35, 48), randFloatSpread(6),
-    LAUNCH_KINDS[Math.floor(Math.random() * LAUNCH_KINDS.length)], RANDOM_HUE
+    randFloatSpread(6), randFloat(...LAUNCH_VY[kind]), randFloatSpread(6),
+    kind, RANDOM_HUE
   );
 }
 
 export function launchSalvo(rockets) {
   const x = randFloatSpread(LAUNCH_X_SPREAD);
   const z = -randFloat(...LAUNCH_Z);
-  const vy = randFloat(38, 46);
   const hue = Math.random();
   const phase = Math.random() * Math.PI * 2;
   const kinds = [...LAUNCH_KINDS].sort(() => Math.random() - 0.5);
@@ -233,7 +265,7 @@ export function launchSalvo(rockets) {
     const angle = phase + (n / SALVO_SIZE) * Math.PI * 2;
     spawnRocket(
       rockets, x, z,
-      Math.cos(angle) * SALVO_SPREAD, vy, Math.sin(angle) * SALVO_SPREAD,
+      Math.cos(angle) * SALVO_SPREAD, randFloat(...LAUNCH_VY[kinds[n]]), Math.sin(angle) * SALVO_SPREAD,
       kinds[n], (hue + n / SALVO_SIZE) % 1
     );
   }
@@ -257,8 +289,24 @@ export function updateRockets(rockets, pools, dt) {
         continue;
       }
     }
+    if (kind === KIND.CASCADE || kind === KIND.CASCADE_STAGE) {
+      rocketColor[c + 3] = randFloat(CASCADE_FLICKER_MIN, 1);
+      if (Math.random() < CASCADE_TRAIL_PER_SECOND * dt) pools.sparks.spawn(x, y, z, 0, 0, 0, 0.5, rocketColor[c], rocketColor[c + 1], rocketColor[c + 2], 1);
+    }
+    if (kind === KIND.CASCADE_STAGE && !alive) {
+      const stage = kinds[i * ROCKET_STRIDE + STAGE_SLOT];
+      if (stage === 1) burstCascade(rockets, x, y, z, CASCADE_SECOND, (rocketHue + CASCADE_HUE_STEP) % 1, 2);
+      else {
+        playExplosion(x, y, z);
+        color.setHSL(CASCADE_FINAL_HUE, 1, 0.6);
+        pools.flash(x, y, z, color);
+        burstSphere(pools.sparks, x, y, z, CASCADE_FINAL_COUNT, CASCADE_FINAL_SPEED);
+      }
+      rockets.kill(i);
+      continue;
+    }
     if (Math.random() < ROCKET_SMOKE_PER_SECOND * dt) emitSmoke(pools.smoke, x, y, z, ROCKET_SMOKE_GRAY, ROCKET_SMOKE_GRAY, ROCKET_SMOKE_GRAY);
-    if (kind !== KIND.CHILD && vel[k + 1] <= 0) {
+    if (kind !== KIND.CHILD && kind !== KIND.CASCADE_STAGE && vel[k + 1] <= 0) {
       explode(pools, rockets, kind, rocketHue === RANDOM_HUE ? Math.random() : rocketHue, x, y, z);
       rockets.kill(i);
     }
