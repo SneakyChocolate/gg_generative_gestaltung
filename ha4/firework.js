@@ -39,7 +39,6 @@ const ORBIT_LIFE = 4;
 const ORBIT_GROW_DRAG = 0.3;
 const ORBIT_SPIN_DRAG = 0.8;
 const ORBIT_GRAVITY_SCALE = 0.15;
-const CASCADE_SHARE = 0.12;
 const CASCADE_FIRST = [4, 6];
 const CASCADE_SECOND = [2, 3];
 const CASCADE_SPEED = [45, 70];
@@ -50,6 +49,19 @@ const CASCADE_FINAL_HUE = 0.12;
 const CASCADE_FINAL_COUNT = 40;
 const CASCADE_FINAL_SPEED = [8, 22];
 const CASCADE_TRAIL_PER_SECOND = 60;
+const FOUNTAIN_COUNT = 20;
+const FOUNTAIN_INTERVAL = 0.3;
+const FOUNTAIN_GLOW_FULL = 3;
+const FOUNTAIN_START_Y = 1.7;
+const FOUNTAIN_CENTER = [65, 10];
+const FOUNTAIN_AREA = 20;
+const FOUNTAIN_VY = [9.9, 11.7];
+const FOUNTAIN_SPREAD = 1.2;
+const FOUNTAIN_LIGHTNESS = 0.5;
+const FOUNTAIN_DIM_SPEED = 4;
+const FOUNTAIN_DROP_LIFE = 0.35;
+const FOUNTAIN_DROP_GRAVITY = GRAVITY * 0.5;
+const FOUNTAIN_DROP_DRIFT = 1.2;
 const SALVO_SIZE = 3;
 const SALVO_SPREAD = 3.5;
 const LAUNCH_X_SPREAD = 500;
@@ -63,19 +75,19 @@ const STAGE_SLOT = 2;
 const RANDOM_HUE = -1;
 const [CX, CY, CZ, UX, UY, UZ, VX, VY, VZ, ANGLE, OMEGA, RADIUS, GROWTH] = Array.from({ length: ORBIT_STRIDE }, (_, n) => n);
 
-export const KIND = { PEONY: 0, HEART: 1, STAR: 2, SPLIT: 3, SPIRAL: 4, CHILD: 5, CASCADE: 6, CASCADE_STAGE: 7 };
-const LAUNCH_KINDS = [
-  KIND.PEONY,
-  // KIND.HEART,
-  KIND.STAR,
-  KIND.SPLIT,
-  // KIND.SPIRAL,
-];
+export const KIND = { PEONY: 0, HEART: 1, STAR: 2, SPLIT: 3, SPIRAL: 4, CHILD: 5, CASCADE: 6, CASCADE_STAGE: 7, FOUNTAIN: 8 };
+export const LAUNCHABLE = [KIND.PEONY, KIND.STAR, KIND.SPLIT, KIND.HEART, KIND.SPIRAL, KIND.CASCADE, KIND.FOUNTAIN];
+export const fountainTuning = { dropAlpha: 0.5, dropsPerSecond: 200 };
+export const enabledKinds = new Set([KIND.PEONY, KIND.STAR, KIND.SPLIT, KIND.CASCADE, KIND.FOUNTAIN]);
+const LAUNCH_WEIGHT = { [KIND.CASCADE]: 0.4, [KIND.FOUNTAIN]: 0.2 };
+const SALVO_EXCLUDED = [KIND.CASCADE, KIND.FOUNTAIN];
 
 const LAUNCH_VY = {
   [KIND.PEONY]: [32, 38],
   [KIND.STAR]: [40, 46],
   [KIND.SPLIT]: [48, 54],
+  [KIND.HEART]: [40, 46],
+  [KIND.SPIRAL]: [40, 46],
   [KIND.CASCADE]: [56, 62],
 };
 
@@ -86,6 +98,8 @@ const normal = new THREE.Vector3();
 const axisU = new THREE.Vector3();
 const axisV = new THREE.Vector3();
 const UP = new THREE.Vector3(0, 1, 0);
+const glowPos = new THREE.Vector3();
+const glowColor = new THREE.Color();
 const { randFloat, randFloatSpread } = THREE.MathUtils;
 
 export class ParticlePool {
@@ -236,17 +250,49 @@ function explode(pools, rockets, kind, hue, x, y, z) {
   else if (kind === KIND.SPIRAL) burstOrbits(pools.orbits, x, y, z, hue);
 }
 
-function spawnRocket(rockets, x, z, vx, vy, vz, kind, hue) {
+function spawnRocket(rockets, x, z, vx, vy, vz, kind, hue, y = 0) {
   if (hue === RANDOM_HUE) color.setRGB(1, 0.9, 0.7);
   else color.setHSL(hue, 0.6, 0.8);
-  const i = rockets.spawn(x, 0, z, vx, vy, vz, Infinity, color.r, color.g, color.b, 1);
+  const i = rockets.spawn(x, y, z, vx, vy, vz, Infinity, color.r, color.g, color.b, 1);
   if (i < 0) return;
   rockets.extra[i * ROCKET_STRIDE + KIND_SLOT] = kind;
   rockets.extra[i * ROCKET_STRIDE + HUE_SLOT] = hue;
 }
 
+const fountainQueue = [];
+
+function launchFountain() {
+  if (fountainQueue.length) return;
+  const hue = Math.random();
+  const x = FOUNTAIN_CENTER[0] + randFloatSpread(FOUNTAIN_AREA);
+  const z = FOUNTAIN_CENTER[1] + randFloatSpread(FOUNTAIN_AREA);
+  for (let n = 0; n < FOUNTAIN_COUNT; n++) fountainQueue.push({ delay: n * FOUNTAIN_INTERVAL, x, z, hue });
+}
+
+function releaseFountainRockets(rockets, dt) {
+  for (let n = fountainQueue.length - 1; n >= 0; n--) {
+    const entry = fountainQueue[n];
+    entry.delay -= dt;
+    if (entry.delay > 0) continue;
+    spawnRocket(
+      rockets, entry.x, entry.z,
+      randFloatSpread(FOUNTAIN_SPREAD), randFloat(...FOUNTAIN_VY), randFloatSpread(FOUNTAIN_SPREAD),
+      KIND.FOUNTAIN, entry.hue, FOUNTAIN_START_Y
+    );
+    fountainQueue.splice(n, 1);
+  }
+}
+
+function pickKind() {
+  const kinds = [...enabledKinds];
+  let roll = Math.random() * kinds.reduce((sum, kind) => sum + (LAUNCH_WEIGHT[kind] ?? 1), 0);
+  return kinds.find(kind => (roll -= LAUNCH_WEIGHT[kind] ?? 1) < 0) ?? kinds[0];
+}
+
 export function launchRocket(rockets) {
-  const kind = Math.random() < CASCADE_SHARE ? KIND.CASCADE : LAUNCH_KINDS[Math.floor(Math.random() * LAUNCH_KINDS.length)];
+  if (!enabledKinds.size) return;
+  const kind = pickKind();
+  if (kind === KIND.FOUNTAIN) return launchFountain(rockets);
   spawnRocket(
     rockets,
     randFloatSpread(LAUNCH_X_SPREAD), -randFloat(...LAUNCH_Z),
@@ -256,23 +302,29 @@ export function launchRocket(rockets) {
 }
 
 export function launchSalvo(rockets) {
+  const salvoKinds = [...enabledKinds].filter(kind => !SALVO_EXCLUDED.includes(kind));
+  if (!salvoKinds.length) return launchRocket(rockets);
   const x = randFloatSpread(LAUNCH_X_SPREAD);
   const z = -randFloat(...LAUNCH_Z);
   const hue = Math.random();
   const phase = Math.random() * Math.PI * 2;
-  const kinds = [...LAUNCH_KINDS].sort(() => Math.random() - 0.5);
   for (let n = 0; n < SALVO_SIZE; n++) {
+    const kind = salvoKinds[Math.floor(Math.random() * salvoKinds.length)];
     const angle = phase + (n / SALVO_SIZE) * Math.PI * 2;
     spawnRocket(
       rockets, x, z,
-      Math.cos(angle) * SALVO_SPREAD, randFloat(...LAUNCH_VY[kinds[n]]), Math.sin(angle) * SALVO_SPREAD,
-      kinds[n], (hue + n / SALVO_SIZE) % 1
+      Math.cos(angle) * SALVO_SPREAD, randFloat(...LAUNCH_VY[kind]), Math.sin(angle) * SALVO_SPREAD,
+      kind, (hue + n / SALVO_SIZE) % 1
     );
   }
 }
 
 export function updateRockets(rockets, pools, dt) {
   const { pos, vel, color: rocketColor, extra: kinds } = rockets;
+  let glowCount = 0;
+  let glowStrength = 0;
+  glowPos.set(0, 0, 0);
+  releaseFountainRockets(rockets, dt);
   for (let i = rockets.count - 1; i >= 0; i--) {
     const kind = kinds[i * ROCKET_STRIDE + KIND_SLOT];
     const rocketHue = kinds[i * ROCKET_STRIDE + HUE_SLOT];
@@ -288,6 +340,24 @@ export function updateRockets(rockets, pools, dt) {
         rockets.kill(i);
         continue;
       }
+    }
+    if (kind === KIND.FOUNTAIN) {
+      const dim = Math.max(Math.min(vel[k + 1] / FOUNTAIN_DIM_SPEED, 1), 0);
+      rocketColor[c + 3] = 0;
+      color.setHSL(rocketHue, 1, FOUNTAIN_LIGHTNESS);
+      if (Math.random() < fountainTuning.dropsPerSecond * dim * dt) {
+        pools.drops.spawn(x, y, z, randFloatSpread(FOUNTAIN_DROP_DRIFT), 0, randFloatSpread(FOUNTAIN_DROP_DRIFT), FOUNTAIN_DROP_LIFE, color.r, color.g, color.b, 1);
+      }
+      if (vel[k + 1] <= 0) {
+        rockets.kill(i);
+        continue;
+      }
+      glowPos.x += x;
+      glowPos.y += y;
+      glowPos.z += z;
+      glowStrength += dim;
+      glowCount++;
+      glowColor.copy(color);
     }
     if (kind === KIND.CASCADE || kind === KIND.CASCADE_STAGE) {
       rocketColor[c + 3] = randFloat(CASCADE_FLICKER_MIN, 1);
@@ -305,12 +375,16 @@ export function updateRockets(rockets, pools, dt) {
       rockets.kill(i);
       continue;
     }
-    if (Math.random() < ROCKET_SMOKE_PER_SECOND * dt) emitSmoke(pools.smoke, x, y, z, ROCKET_SMOKE_GRAY, ROCKET_SMOKE_GRAY, ROCKET_SMOKE_GRAY);
+    if (kind !== KIND.FOUNTAIN && Math.random() < ROCKET_SMOKE_PER_SECOND * dt) emitSmoke(pools.smoke, x, y, z, ROCKET_SMOKE_GRAY, ROCKET_SMOKE_GRAY, ROCKET_SMOKE_GRAY);
     if (kind !== KIND.CHILD && kind !== KIND.CASCADE_STAGE && vel[k + 1] <= 0) {
       explode(pools, rockets, kind, rocketHue === RANDOM_HUE ? Math.random() : rocketHue, x, y, z);
       rockets.kill(i);
     }
   }
+  if (glowCount) {
+    glowPos.divideScalar(glowCount);
+    pools.fountainGlow(glowPos.x, glowPos.y, glowPos.z, glowColor, Math.min(glowStrength / FOUNTAIN_GLOW_FULL, 1));
+  } else pools.fountainGlow(0, 0, 0, glowColor, 0);
 }
 
 export function updateSparks(sparks, smoke, flow, dt) {
@@ -326,6 +400,14 @@ export function updateSparks(sparks, smoke, flow, dt) {
     }
     if (alive) sparks.fade(i, 1);
     else sparks.kill(i);
+  }
+}
+
+export function updateDrops(drops, dt) {
+  const damp = Math.pow(drops.drag, dt);
+  for (let i = drops.count - 1; i >= 0; i--) {
+    if (drops.step(i, 0, FOUNTAIN_DROP_GRAVITY, 0, damp, dt)) drops.fade(i, fountainTuning.dropAlpha);
+    else drops.kill(i);
   }
 }
 
