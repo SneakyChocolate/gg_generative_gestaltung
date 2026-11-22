@@ -8,7 +8,7 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { noisePotential3D } from './curlnoise.js';
 import { createWaterReflection } from './water.js';
 import { updateListener } from './sound.js';
-import { ParticlePool, ORBIT_STRIDE, ROCKET_STRIDE, launchRocket, launchSalvo, updateRockets, updateSparks, updateOrbits, updateSmoke } from './firework.js';
+import { ParticlePool, ORBIT_STRIDE, ROCKET_STRIDE, KIND, LAUNCHABLE, enabledKinds, fountainTuning, launchRocket, launchSalvo, updateRockets, updateSparks, updateDrops, updateOrbits, updateSmoke } from './firework.js';
 
 const EYE_HEIGHT = 1.7;
 const LOOK_UP_DEG =6;
@@ -32,6 +32,8 @@ const SKY_INTENSITY = 2;
 const FLASH_LIGHTS = 6;
 const FLASH_INTENSITY = 10000;
 const FLASH_DECAY = 0.6;
+const FOUNTAIN_LIGHT_INTENSITY = 150;
+const MAX_DROPS = 4000;
 
 function softDotTexture() {
   const canvas = document.createElement('canvas');
@@ -100,13 +102,42 @@ const debugPanel = document.createElement('pre');
 debugPanel.style.cssText = 'position:fixed;top:8px;left:8px;margin:0;padding:8px 12px;color:#fff;background:rgba(0,0,0,0.6);font:14px monospace;display:none;pointer-events:none';
 document.body.appendChild(debugPanel);
 
+const kindPanel = document.createElement('div');
+kindPanel.style.cssText = 'position:fixed;top:170px;left:8px;padding:8px 12px;color:#fff;background:rgba(0,0,0,0.6);font:14px monospace;display:none';
+for (const kind of LAUNCHABLE) {
+  const label = document.createElement('label');
+  label.style.display = 'block';
+  const checkbox = document.createElement('input');
+  checkbox.type = 'checkbox';
+  checkbox.checked = enabledKinds.has(kind);
+  checkbox.addEventListener('change', () => enabledKinds[checkbox.checked ? 'add' : 'delete'](kind));
+  label.append(checkbox, ` ${Object.keys(KIND).find(name => KIND[name] === kind).toLowerCase()}`);
+  kindPanel.append(label);
+}
+for (const [key, max, step] of [['dropAlpha', 0.5, 0.01], ['dropsPerSecond', 200, 1]]) {
+  const label = document.createElement('label');
+  label.style.display = 'block';
+  const value = document.createElement('span');
+  value.textContent = fountainTuning[key];
+  const slider = Object.assign(document.createElement('input'), { type: 'range', min: 0, max, step, value: fountainTuning[key] });
+  slider.addEventListener('input', () => {
+    fountainTuning[key] = Number(slider.value);
+    value.textContent = slider.value;
+  });
+  label.append(`${key} `, value, document.createElement('br'), slider);
+  kindPanel.append(label);
+}
+document.body.appendChild(kindPanel);
+
 function updateDebugPanel() {
   const [x, y, z] = ['x', 'y', 'z'].map(axis => THREE.MathUtils.radToDeg(camera.rotation[axis]).toFixed(1).padStart(7));
-  debugPanel.textContent = `camera rotation\nX: ${x}\nY: ${y}\nZ: ${z}\nfps: ${fps.toFixed(0)}\nparticles: ${[rockets, ...shapePools, orbits, smoke].reduce((sum, pool) => sum + pool.count, 0)}`;
+  debugPanel.textContent = `camera rotation\nX: ${x}\nY: ${y}\nZ: ${z}\nfps: ${fps.toFixed(0)}\nparticles: ${[rockets, drops, ...shapePools, orbits, smoke].reduce((sum, pool) => sum + pool.count, 0)}`;
 }
 
 window.addEventListener('keydown', event => {
-  if (event.key.toLowerCase() === 'd') debugPanel.style.display = debugPanel.style.display === 'none' ? 'block' : 'none';
+  if (event.key.toLowerCase() !== 'd') return;
+  const display = debugPanel.style.display === 'none' ? 'block' : 'none';
+  debugPanel.style.display = kindPanel.style.display = display;
 });
 
 const DRAG_SENSITIVITY = 0.003;
@@ -136,6 +167,7 @@ function pointsMaterial(size, blending, map = dot) {
 
 const rockets = new ParticlePool(MAX_ROCKETS, 1, pointsMaterial(2, THREE.AdditiveBlending), ROCKET_STRIDE);
 const sparks = new ParticlePool(MAX_SPARKS, SPARK_DRAG, pointsMaterial(1.2, THREE.AdditiveBlending));
+const drops = new ParticlePool(MAX_DROPS, 1, pointsMaterial(0.4, THREE.AdditiveBlending));
 const hearts = new ParticlePool(MAX_SHAPES, SPARK_DRAG, pointsMaterial(5, THREE.AdditiveBlending, heartTexture()));
 const stars = new ParticlePool(MAX_SHAPES, SPARK_DRAG, pointsMaterial(3.5, THREE.AdditiveBlending, starTexture()));
 const orbits = new ParticlePool(MAX_SHAPES, 1, pointsMaterial(1.6, THREE.AdditiveBlending), ORBIT_STRIDE);
@@ -162,11 +194,20 @@ function updateFlashes(dt) {
   }
 }
 
-const pools = { sparks, hearts, stars, orbits, smoke, flash };
-const shapePools = [sparks, hearts, stars];
-scene.add(smoke.points, sparks.points, hearts.points, stars.points, orbits.points, rockets.points);
+const fountainLight = new THREE.PointLight(0xffffff, 0);
+scene.add(fountainLight);
 
-const water = createWaterReflection(renderer, [rockets, sparks, hearts, stars, orbits], scene.fog);
+function fountainGlow(x, y, z, color, strength) {
+  fountainLight.position.set(x, y, z);
+  fountainLight.color.copy(color);
+  fountainLight.intensity = FOUNTAIN_LIGHT_INTENSITY * strength;
+}
+
+const pools = { sparks, hearts, stars, orbits, smoke, flash, fountainGlow, drops };
+const shapePools = [sparks, hearts, stars];
+scene.add(smoke.points, drops.points, sparks.points, hearts.points, stars.points, orbits.points, rockets.points);
+
+const water = createWaterReflection(renderer, [rockets, sparks, drops, hearts, stars, orbits], scene.fog);
 new GLTFLoader().load('./assets/city.glb', gltf => {
   water.setWater(gltf.scene.getObjectByName('water'));
   gltf.scene.traverse(object => {
@@ -213,10 +254,11 @@ renderer.setAnimationLoop(() => {
   const simDt = dt * FIREWORK_SPEED;
   updateRockets(rockets, pools, simDt);
   for (const pool of shapePools) updateSparks(pool, smoke, flow, simDt);
+  updateDrops(drops, simDt);
   updateOrbits(orbits, smoke, simDt);
   updateSmoke(smoke, flow, simDt);
   updateFlashes(simDt);
-  for (const pool of [rockets, ...shapePools, orbits, smoke]) pool.upload();
+  for (const pool of [rockets, drops, ...shapePools, orbits, smoke]) pool.upload();
 
   if (debugPanel.style.display !== 'none') updateDebugPanel();
   updateListener(camera);
