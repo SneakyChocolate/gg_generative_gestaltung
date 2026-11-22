@@ -14,6 +14,7 @@ const RIPPLE_VERTICAL = 0.3;
 const RIPPLE_SPEED = 1;
 const STREAK_LENGTH = 0.1;
 const STREAK_TAPS = 12;
+const MAX_POINT_SIZE = 24;
 
 const vertexShader = `
 varying vec3 vWorld;
@@ -74,6 +75,13 @@ export function createWaterReflection(renderer, pools, fog) {
   for (const pool of pools) {
     const material = pool.points.material.clone();
     material.size *= RESOLUTION;
+    material.opacity *= pool.reflectionGain ?? 1;
+    material.onBeforeCompile = (shader) => {
+      shader.vertexShader = shader.vertexShader.replace(
+        '#include <fog_vertex>',
+        `#include <fog_vertex>\n  gl_PointSize = min(gl_PointSize, ${MAX_POINT_SIZE.toFixed(1)});`
+      );
+    };
     const points = new THREE.Points(pool.geometry, material);
     points.frustumCulled = false;
     scene.add(points);

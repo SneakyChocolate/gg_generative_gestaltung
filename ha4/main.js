@@ -32,8 +32,11 @@ const SKY_INTENSITY = 2;
 const FLASH_LIGHTS = 6;
 const FLASH_INTENSITY = 10000;
 const FLASH_DECAY = 0.6;
+const FLASH_RANGE = 150;
+const FOUNTAIN_LIGHT_RANGE = 60;
 const FOUNTAIN_LIGHT_INTENSITY = 150;
 const MAX_DROPS = 4000;
+const DROP_REFLECTION_GAIN = 6;
 
 function softDotTexture() {
   const canvas = document.createElement('canvas');
@@ -168,12 +171,13 @@ function pointsMaterial(size, blending, map = dot) {
 const rockets = new ParticlePool(MAX_ROCKETS, 1, pointsMaterial(2, THREE.AdditiveBlending), ROCKET_STRIDE);
 const sparks = new ParticlePool(MAX_SPARKS, SPARK_DRAG, pointsMaterial(1.2, THREE.AdditiveBlending));
 const drops = new ParticlePool(MAX_DROPS, 1, pointsMaterial(0.4, THREE.AdditiveBlending));
+drops.reflectionGain = DROP_REFLECTION_GAIN;
 const hearts = new ParticlePool(MAX_SHAPES, SPARK_DRAG, pointsMaterial(5, THREE.AdditiveBlending, heartTexture()));
 const stars = new ParticlePool(MAX_SHAPES, SPARK_DRAG, pointsMaterial(3.5, THREE.AdditiveBlending, starTexture()));
 const orbits = new ParticlePool(MAX_SHAPES, 1, pointsMaterial(1.6, THREE.AdditiveBlending), ORBIT_STRIDE);
 const smoke = new ParticlePool(MAX_SMOKE, SMOKE_DRAG, pointsMaterial(4, THREE.NormalBlending));
 const flashLights = Array.from({ length: FLASH_LIGHTS }, () => {
-  const light = new THREE.PointLight(0xffffff, 0);
+  const light = new THREE.PointLight(0xffffff, 0, FLASH_RANGE);
   scene.add(light);
   return light;
 });
@@ -194,7 +198,7 @@ function updateFlashes(dt) {
   }
 }
 
-const fountainLight = new THREE.PointLight(0xffffff, 0);
+const fountainLight = new THREE.PointLight(0xffffff, 0, FOUNTAIN_LIGHT_RANGE);
 scene.add(fountainLight);
 
 function fountainGlow(x, y, z, color, strength) {
