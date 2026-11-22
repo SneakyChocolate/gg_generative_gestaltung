@@ -97,12 +97,12 @@ camera.rotation.x = THREE.MathUtils.degToRad(LOOK_UP_DEG);
 camera.rotation.y = THREE.MathUtils.degToRad(LOOK_RIGHT_DEG);
 
 const debugPanel = document.createElement('pre');
-debugPanel.style.cssText = 'position:fixed;top:8px;left:8px;margin:0;padding:8px 12px;color:#9f9;background:rgba(0,0,0,0.6);font:14px monospace;display:none;pointer-events:none';
+debugPanel.style.cssText = 'position:fixed;top:8px;left:8px;margin:0;padding:8px 12px;color:#fff;background:rgba(0,0,0,0.6);font:14px monospace;display:none;pointer-events:none';
 document.body.appendChild(debugPanel);
 
 function updateDebugPanel() {
   const [x, y, z] = ['x', 'y', 'z'].map(axis => THREE.MathUtils.radToDeg(camera.rotation[axis]).toFixed(1).padStart(7));
-  debugPanel.textContent = `camera rotation (deg)\nX (pitch): ${x}\nY (yaw):   ${y}\nZ (roll):  ${z}`;
+  debugPanel.textContent = `camera rotation\nX: ${x}\nY: ${y}\nZ: ${z}\nfps: ${fps.toFixed(0)}\nparticles: ${[rockets, ...shapePools, orbits, smoke].reduce((sum, pool) => sum + pool.count, 0)}`;
 }
 
 window.addEventListener('keydown', event => {
@@ -191,9 +191,21 @@ window.addEventListener('resize', () => {
 });
 
 const clock = new THREE.Clock();
+const FPS_INTERVAL = 0.2;
+let fps = 0;
+let fpsFrames = 0;
+let fpsTime = 0;
 
 renderer.setAnimationLoop(() => {
-  const dt = Math.min(clock.getDelta(), 1 / 30);
+  const frameTime = clock.getDelta();
+  fpsFrames++;
+  fpsTime += frameTime;
+  if (fpsTime >= FPS_INTERVAL) {
+    fps = fpsFrames / fpsTime;
+    fpsFrames = 0;
+    fpsTime = 0;
+  }
+  const dt = Math.min(frameTime, 1 / 30);
   const flow = noisePotential3D(FLOW_SCALE, clock.elapsedTime * FLOW_SPEED);
 
   if (Math.random() < LAUNCHES_PER_SECOND * dt) (Math.random() < SALVO_SHARE ? launchSalvo : launchRocket)(rockets);
