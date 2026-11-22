@@ -1,3 +1,4 @@
+// Hinweis: Dieser Code wurde mit KI (Claude) generiert.
 // Curl-Noise Helfer für three.js
 // Quelle: Bridson, Hourihan, Nordenstam (2007): "Curl-Noise for Procedural Fluid Flow", SIGGRAPH.
 // Idee: Geschwindigkeit = Curl eines Potentials -> divergenzfrei (inkompressibel), keine Senken.

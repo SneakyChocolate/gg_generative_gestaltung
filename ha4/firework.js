@@ -1,3 +1,4 @@
+// Hinweis: Dieser Code wurde mit KI (Claude) generiert.
 // Basis: Daniel Shiffman, Coding Challenge 27 "Fireworks"
 // http://codingtra.in
 // https://youtu.be/CKeyIbT3vXI

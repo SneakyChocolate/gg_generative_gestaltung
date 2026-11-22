@@ -1,3 +1,4 @@
+// Hinweis: Dieser Code wurde mit KI (Claude) generiert.
 // Planare Spiegelung nur der Feuerwerkspartikel, Prinzip wie three.js Reflector (Spiegelkamera + Render Target):
 // https://github.com/mrdoob/three.js/blob/r160/examples/jsm/objects/Reflector.js
 // Fresnel nach Schlick: https://en.wikipedia.org/wiki/Schlick%27s_approximation

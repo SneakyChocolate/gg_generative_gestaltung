@@ -1,3 +1,4 @@
+// Hinweis: Dieser Code wurde mit KI (Claude) generiert.
 import * as THREE from 'three';
 
 const SOUND_FILES = ['normal_bang'].map((name) => `./sound/${name}.wav`);
