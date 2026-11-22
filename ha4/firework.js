@@ -225,7 +225,7 @@ function burstOrbits(orbits, x, y, z, hue) {
 }
 
 function explode(pools, rockets, kind, hue, x, y, z) {
-  playExplosion(x);
+  playExplosion(x, y, z);
   color.setHSL(hue, 1, 0.6);
   pools.flash(x, y, z, color);
   if (kind === KIND.PEONY) burstSphere(pools.sparks, x, y, z, SPARK_COUNT, [20, 60]);
@@ -297,7 +297,7 @@ export function updateRockets(rockets, pools, dt) {
       const stage = kinds[i * ROCKET_STRIDE + STAGE_SLOT];
       if (stage === 1) burstCascade(rockets, x, y, z, CASCADE_SECOND, (rocketHue + CASCADE_HUE_STEP) % 1, 2);
       else {
-        playExplosion(x);
+        playExplosion(x, y, z);
         color.setHSL(CASCADE_FINAL_HUE, 1, 0.6);
         pools.flash(x, y, z, color);
         burstSphere(pools.sparks, x, y, z, CASCADE_FINAL_COUNT, CASCADE_FINAL_SPEED);

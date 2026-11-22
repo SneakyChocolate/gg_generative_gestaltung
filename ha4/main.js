@@ -7,6 +7,7 @@ import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { noisePotential3D } from './curlnoise.js';
 import { createWaterReflection } from './water.js';
+import { updateListener } from './sound.js';
 import { ParticlePool, ORBIT_STRIDE, ROCKET_STRIDE, launchRocket, launchSalvo, updateRockets, updateSparks, updateOrbits, updateSmoke } from './firework.js';
 
 const EYE_HEIGHT = 1.7;
@@ -206,6 +207,7 @@ renderer.setAnimationLoop(() => {
   for (const pool of [rockets, ...shapePools, orbits, smoke]) pool.upload();
 
   if (debugPanel.style.display !== 'none') updateDebugPanel();
+  updateListener(camera);
   water.render(camera, clock.elapsedTime);
   composer.render();
 });
